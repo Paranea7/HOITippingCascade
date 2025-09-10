@@ -73,9 +73,9 @@ def find_fixed_points(params):
 if __name__ == "__main__":  # 主程序的入口
     # 参数设置
     # 为了在 3D 图中更清晰地展示，并平衡计算时间，适当减少点数
-    c1_range = np.linspace(0, 0.8, 15)  # 15个点
-    c2_range = np.linspace(0, 0.8, 15)  # 15个点
-    c3_range = np.linspace(0, 0.8, 15)  # 15个点
+    c1_range = np.linspace(0, 0.8, 161)  # 15个点
+    c2_range = np.linspace(0, 0.8, 161)  # 15个点
+    c3_range = np.linspace(0, 0.8, 161)  # 15个点
 
     # 定义不同的耦合矩阵配置
     d_matrix_list = [
