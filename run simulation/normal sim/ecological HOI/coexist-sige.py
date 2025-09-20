@@ -73,7 +73,7 @@ def plot_survival_rate_vs_sigma_e(sigma_e_values, survival_rates_list, errors_li
         plt.errorbar(sigma_e_values, rates, yerr=errs, fmt='o--',
                      color=colors[i], capsize=5, label=f'μ_e = {mu_e}')  # 绘制带误差条的存活率
 
-    plt.title('Survival Rate vs Three-body Coupling Strength', fontsize=14)  # 图表标题
+    plt.title('Survival Rate vs Three-body Coupling Strength (SE error bars)', fontsize=14)  # 图表标题
     plt.xlabel('σ_e (Three-body Coupling Strength)', fontsize=12)  # x轴标签
     plt.ylabel('Survival Rate', fontsize=12)  # y轴标签
     plt.grid(alpha=0.3)  # 添加网格
@@ -84,24 +84,24 @@ def plot_survival_rate_vs_sigma_e(sigma_e_values, survival_rates_list, errors_li
 def main():
     """参数设置和主流程"""
     s = 5  # 系统节点数量
-    t_steps = 1500  # 模拟的时间步长
-    simulations_per_sigma = 100  # 每个参数点的模拟次数
+    t_steps = 6000  # 模拟的时间步长
+    simulations_per_sigma = 500  # 每个参数点的模拟次数
 
     # 耦合参数设置
-    mu_c = 0.0  # 控制参数均值
-    sigma_c = 1.0  # 控制参数标准差
+    mu_c = 0   # 控制参数均值
+    sigma_c = 2*np.sqrt(3)/9  # 控制参数标准差
     mu_d = 0.0  # 二体耦合均值
     sigma_d = 0.0  # 二体耦合标准差
     rho_d = 1.0  # 二体耦合相关系数
 
     # 扫描不同的三体耦合强度参数
-    sigma_e_values = np.linspace(0.0, 1.0, 11)  # 三体耦合强度扫描范围
-    mu_e_values = [0.2, 0.5, 1.0]  # 不同三体耦合均值
+    sigma_e_values = np.linspace(0.0, 1.0, 21)  # 三体耦合强度扫描范围
+    mu_e_values = [0.02, 0.03, 0.05]  # 不同三体耦合均值
 
     # 并行计算框架
     with Pool() as pool:  # 使用进程池来执行并行计算
         survival_rates_list = []  # 存放存活率
-        errors_list = []  # 存放误差
+        errors_list = []  # 存放误差（将为标准误 SE）
 
         for mu_e in mu_e_values:  # 遍历不同的三体耦合均值
             survival_rates = []  # 存放每个 sigma_e 的存活率
@@ -118,12 +118,13 @@ def main():
                 survival_all.append(results)  # 记录所有模拟结果
                 survival_rates.append(np.mean(results))  # 计算平均存活率
 
-            # 计算误差
-            errors = [np.std(survivals) for survivals in survival_all]  # 计算每个组的标准差
+            # 计算标准误（SE）：使用无偏样本标准差（ddof=1）除以 sqrt(N)
+            N = simulations_per_sigma
+            errors_se = [np.std(survivals, ddof=1) / np.sqrt(N) for survivals in survival_all]
             survival_rates_list.append(survival_rates)  # 存放平均存活率
-            errors_list.append(errors)  # 存放误差
+            errors_list.append(errors_se)  # 存放标准误
 
-    # 结果可视化
+    # 结果可视化（误差条为标准误 SE）
     plot_survival_rate_vs_sigma_e(sigma_e_values, survival_rates_list, errors_list, mu_e_values)
 
 if __name__ == "__main__":

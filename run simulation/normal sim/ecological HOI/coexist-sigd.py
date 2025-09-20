@@ -73,7 +73,7 @@ def plot_survival_rate(sigma_d_values, survival_rates_list, errors_list, mu_d_va
         plt.errorbar(sigma_d_values, survival_rates_list[i], yerr=errors_list[i], fmt='o-', capsize=5,
                      label=f'Mu_d = {mu_d}')  # 带误差条的绘制
 
-    plt.title('Survival Rate vs Sigma_d with Error Bars')  # 图表标题
+    plt.title('Survival Rate vs Sigma_d with SE Error Bars')  # 图表标题
     plt.xlabel('Sigma_d (Standard Deviation of Two-body Coupling)')  # x轴标签
     plt.ylabel('Survival Rate')  # y轴标签
     plt.legend()  # 显示图例
@@ -84,19 +84,19 @@ def main():
     """
     主函数，设置参数并运行多个动态模拟以获得存活率。
     """
-    s = 5  # 系统个体数
-    mu_c = 0.0  # 控制参数均值
-    sigma_c = 1.0  # 控制参数标准差
+    s = 50  # 系统个体数
+    mu_c = 0  # 控制参数均值
+    sigma_c = 2*np.sqrt(3)/9  # 控制参数标准差
     rho_d = 1.0  # 二体耦合相关系数
     mu_e = 0.0  # 三体耦合均值
     sigma_e = 0.0  # 三体耦合标准差
-    t_steps = 1500  # 设置时间步数
-    simulations_per_sigma = 100  # 每个 sigma_d 下的模拟次数
+    t_steps = 5000  # 设置时间步数
+    simulations_per_sigma = 500  # 每个 sigma_d 下的模拟次数
 
-    sigma_d_values = np.linspace(0.0, 1.0, 11)  # sigma_d 的取值范围
-    mu_d_values = [0.2, 0.5, 1.0]  # 不同的 mu_d 值
+    sigma_d_values = np.linspace(0.0, 1.0, 21)  # sigma_d 的取值范围
+    mu_d_values = [0.2, 0.3, 0.5]  # 不同的 mu_d 值
     survival_rates_list = []  # 存放存活率列表
-    survival_all_list = []  # 存放所有存活结果以计算标准差
+    survival_all_list = []  # 存放所有存活结果以计算标准误
 
     with Pool() as pool:  # 使用池来进行并行计算
         for mu_d in mu_d_values:
@@ -112,10 +112,13 @@ def main():
                 survival_rates.append(average_survival_rate)  # 存放平均值
 
             survival_rates_list.append(survival_rates)  # 收集所有存活率结果
-            errors = [np.std(survivals) for survivals in survival_all]  # 计算误差
-            survival_all_list.append(errors)  # 存放误差
 
-    # 绘制存活率与 sigma_d 的关系图
+            # 计算标准误（SE）：使用无偏样本标准差（ddof=1）除以 sqrt(N)
+            N = simulations_per_sigma
+            errors_se = [np.std(survivals, ddof=1) / np.sqrt(N) for survivals in survival_all]
+            survival_all_list.append(errors_se)  # 存放标准误
+
+    # 绘制存活率与 sigma_d 的关系图（误差条为标准误 SE）
     plot_survival_rate(sigma_d_values, survival_rates_list, survival_all_list, mu_d_values)
 
 if __name__ == "__main__":
