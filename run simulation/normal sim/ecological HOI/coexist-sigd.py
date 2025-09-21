@@ -84,14 +84,14 @@ def main():
     """
     主函数，设置参数并运行多个动态模拟以获得存活率。
     """
-    s = 10  # 系统个体数
+    s = 50  # 系统个体数
     mu_c = 0  # 控制参数均值
     sigma_c = 2*np.sqrt(3)/9  # 控制参数标准差
     rho_d = 1.0  # 二体耦合相关系数
     mu_e = 0.0  # 三体耦合均值
     sigma_e = 1.0  # 三体耦合标准差
-    t_steps = 5000  # 设置时间步数
-    simulations_per_sigma = 500  # 每个 sigma_d 下的模拟次数
+    t_steps = 10000  # 设置时间步数
+    simulations_per_sigma = 50  # 每个 sigma_d 下的模拟次数
 
     sigma_d_values = np.linspace(0.0, 1.0, 21)  # sigma_d 的取值范围
     mu_d_values = [0.2, 0.3, 0.5]  # 不同的 mu_d 值

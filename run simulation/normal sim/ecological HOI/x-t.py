@@ -96,16 +96,16 @@ def plot_evolution(x_history):
 def main():
     s = 100
     mu_c = 0.0
-    sigma_c = 1.0
-    mu_d = 0.0
-    sigma_d = 1.0
+    sigma_c = 2*np.sqrt(3)/9
+    mu_d = 0.3
+    sigma_d = 0.4
     rho_d = 1.0
     mu_e = 0.0
-    sigma_e = 0.0
+    sigma_e = 1.0
 
     c_i, d_ij, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
     x_init = np.full(s, -0.6)
-    t_steps = 1500
+    t_steps = 6000
 
     # 使用并行处理进行模拟
     x_history = parallel_dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps, n_jobs=1)
