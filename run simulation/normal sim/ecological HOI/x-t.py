@@ -104,8 +104,8 @@ def main():
     sigma_e = 1.0
 
     c_i, d_ij, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
-    x_init = np.full(s, -0.6)
-    t_steps = 6000
+    x_init = np.random.normal(loc=0.0, scale=1.0, size=s)
+    t_steps = 5000
 
     # 使用并行处理进行模拟
     x_history = parallel_dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps, n_jobs=1)

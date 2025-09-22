@@ -60,7 +60,7 @@ def single_simulation(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_s
     执行单次模拟，返回存活率以用于并行处理。
     """
     c_i, _, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
-    x_init = np.full(s, -0.8)  # 用固定值初始化状态
+    x_init = np.full(s,0.0)  # 用固定值初始化状态
     final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)  # 运行动态模拟
     return calculate_survival_rate(final_states)  # 返回存活率
 
@@ -84,12 +84,12 @@ def main():
     """
     主函数，设置参数并运行多个动态模拟以获得存活率。
     """
-    s = 50  # 系统个体数
+    s = 30  # 系统个体数
     mu_c = 0  # 控制参数均值
     sigma_c = 2*np.sqrt(3)/9  # 控制参数标准差
     rho_d = 1.0  # 二体耦合相关系数
     mu_e = 0.0  # 三体耦合均值
-    sigma_e = 1.0  # 三体耦合标准差
+    sigma_e = 0.0  # 三体耦合标准差
     t_steps = 5000  # 设置时间步数
     simulations_per_sigma = 500  # 每个 sigma_d 下的模拟次数
 

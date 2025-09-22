@@ -60,7 +60,7 @@ def calculate_survival_rate(final_states):
 def single_simulation(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps):
     """单次模拟包装函数"""
     c_i, _, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)  # 生成参数
-    x_init = np.full(s, -0.8)  # 固定初始状态
+    x_init = np.random.normal(loc=0.0, scale=1.0, size=s)
     final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)  # 进行动态模拟
     return calculate_survival_rate(final_states)  # 返回存活率
 
@@ -84,7 +84,7 @@ def plot_survival_rate_vs_sigma_e(sigma_e_values, survival_rates_list, errors_li
 def main():
     """参数设置和主流程"""
     s = 5  # 系统节点数量
-    t_steps = 6000  # 模拟的时间步长
+    t_steps = 5000  # 模拟的时间步长
     simulations_per_sigma = 500  # 每个参数点的模拟次数
 
     # 耦合参数设置
