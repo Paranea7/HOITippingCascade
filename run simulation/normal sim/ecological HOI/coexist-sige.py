@@ -60,7 +60,7 @@ def calculate_survival_rate(final_states):
 def single_simulation(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps):
     """单次模拟包装函数"""
     c_i, _, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)  # 生成参数
-    x_init = np.random.normal(loc=0.0, scale=1.0, size=s)
+    x_init = np.full(s,0.0)
     final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)  # 进行动态模拟
     return calculate_survival_rate(final_states)  # 返回存活率
 

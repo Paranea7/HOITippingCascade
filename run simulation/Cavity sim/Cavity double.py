@@ -10,10 +10,10 @@ def bimodal_cavity_method(params, max_iter=1000, tol=1e-6):
     # 解析参数
     μ_c, μ_d, μ_e = params['μ_c'], params['μ_d'], params['μ_e']
     σ_c, σ_d, σ_e = params['σ_c'], params['σ_d'], params['σ_e']
-    ρ_d = params.get('ρ_d', 0.0)
+    ρ_d = params.get('ρ_d', 1.0)
 
     # 初始猜测
-    phi = 0.5  # 初始共存比例
+    phi = 0.9  # 初始共存比例
     v = 1.0  # 初始响应参数
     μ1, μ2 = -1.0, 1.0  # 两个状态的均值
     σ1_sq, σ2_sq = 0.1, 0.1  # 两个状态的方差
