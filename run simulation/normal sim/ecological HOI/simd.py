@@ -70,7 +70,7 @@ def single_simulation(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_s
     该函数适合用于并行执行（multiprocessing.Pool.starmap）。
     """
     c_i, _, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
-    x_init = np.full(s, -0.6, dtype=float)
+    x_init = np.full(s, 0.6, dtype=float)
     final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)
     return calculate_survival_rate(final_states)
 
@@ -183,9 +183,9 @@ def main():
     rho_d = 1.0
 
     # ----- 扫描参数集合 -----
-    s_values = [50]
-    mu_e_values = [0.3]
-    sigma_e_values = [1.0]
+    s_values = [30, 50, 100]
+    mu_e_values = [0.0, 0.1, 0.2, 0.3]
+    sigma_e_values = [0.0, 0.1, 0.3, 0.5, 1.0]
 
     mu_d_values = [0.2, 0.3, 0.5]
     sigma_d_values = np.linspace(0.0, 1.0, 21)
@@ -196,10 +196,10 @@ def main():
     simulations_per_sigma = 500
 
     # 并行 worker 数，默认使用 cpu_count()-1 避免占满所有核心
-    n_workers = max(1, cpu_count())
+    n_workers = max(1, cpu_count() - 1)
 
-    out_plot_dir = "outputplotd1"
-    out_csv_dir = "outputcsvd1"
+    out_plot_dir = "outputplotd"
+    out_csv_dir = "outputcsvd"
     os.makedirs(out_plot_dir, exist_ok=True)
     os.makedirs(out_csv_dir, exist_ok=True)
 
