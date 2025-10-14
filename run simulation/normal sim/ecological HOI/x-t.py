@@ -104,7 +104,7 @@ def main():
     sigma_e = 0.2
 
     c_i, d_ij, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
-    x_init = np.full(s,0.6)
+    x_init = np.full(s,0.16)
     t_steps = 5000
 
     # 使用并行处理进行模拟

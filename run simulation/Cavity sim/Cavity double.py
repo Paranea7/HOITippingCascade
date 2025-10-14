@@ -320,7 +320,7 @@ class BistableCavitySolver:
         plt.tight_layout()
         plt.show()
 
-    def plot_bimodal_distribution(self, x_range=(-3, 3), n_points=10000):
+    def plot_bimodal_distribution(self, x_range=(-3, 3), n_points=1000):
         res = self.solve_iterative(verbose=False)
         x = np.linspace(x_range[0], x_range[1], n_points)
         pdf = self.boltzmann_distribution(x, res['μ_eff'], res['σ_eff'])
@@ -559,7 +559,7 @@ if __name__ == "__main__":
     # 数值仿真（RK4）
     rng = np.random.default_rng(42)
     c_i, d_ij, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, rng=rng)
-    x_init = np.full(s, 0.6)
+    x_init = np.full(s, 0.18)
     t_steps = 3000
     dt = 0.01
 

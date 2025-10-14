@@ -54,18 +54,18 @@ def plot_final_state_distribution(final_states):
 
 
 def main():
-    s = 500
+    s = 300
     mu_c = 0.0
-    sigma_c = 0.5
-    mu_d = 0.0
-    sigma_d = 0.5
+    sigma_c = 0.4
+    mu_d = 0.2
+    sigma_d = 0.3
     rho_d = 1.0
-    mu_e = 0.0
-    sigma_e = 0.0
+    mu_e = 0.2
+    sigma_e = 0.1
 
     c_i, d_ij, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
-    x_init = np.full(s, -0.8)
-    t_steps = 500
+    x_init = np.full(s, 0.6)
+    t_steps = 3000
 
     final_states, survival_counts = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)
 
