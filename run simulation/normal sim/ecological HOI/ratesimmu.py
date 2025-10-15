@@ -48,7 +48,7 @@ def calculate_survival_rate(final_states):
 
 def single_simulation_once(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps, x0=0.6):
     c_i, _, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
-    x_init = np.random.normal(0,1, s)
+    x_init = np.full(s,-0.6)
     final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)
     return calculate_survival_rate(final_states)
 
