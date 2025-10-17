@@ -177,7 +177,7 @@ def main():
     sigma_e = 0.2
 
     # phi_0 设置为比例 0.16（即 16% 的节点拥有非零 c_i）
-    phi_0 = 0.16
+    phi_0 = 0.32
     fixed_c_value = 2.0 * np.sqrt(3.0) / 9.0  # 非零 c 的值
 
     # 生成参数（注意：generate_parameters 中会随机选择 count 个索引赋值为 fixed_c_value）
@@ -186,11 +186,11 @@ def main():
     )
 
     # 初始条件和步数
-    x_init = np.full(s, 0.16)  # 你原脚本中为 0.16
-    t_steps = 5000
+    x_init = np.full(s, 0.2)  # 你原脚本中为 0.16
+    t_steps = 500
 
     # 并行参数：n_jobs 为 joblib 并行进程数，repeats 表示重复独立运行的次数（每次 dynamics_simulation 返回 t_steps 行数据）
-    n_jobs = 1
+    n_jobs = 16
     repeats = 1
 
     # 运行仿真
