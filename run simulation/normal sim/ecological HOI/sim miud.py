@@ -221,21 +221,21 @@ def main():
     fixed_c_value = 2.0 * np.sqrt(3.0) / 9.0
 
     # ----- 扫描参数集合 -----
-    s_values = [50,100]
-    mu_e_values = [0.5]
+    s_values = [30,50,100]
+    mu_e_values = [0.1,0.2,0.3,0.5]
     sigma_e_values = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
 
     mu_d_values = [0.1,0.2, 0.3,0.4, 0.5,0.6,0.7,0.8,0.9,1.0]
     sigma_d_values = np.linspace(0.0, 1.0, 21)
 
     # ----- 运行参数（请根据机器资源调整） -----
-    t_steps = 700
-    simulations_per_sigma = 50
+    t_steps = 800
+    simulations_per_sigma = 30
 
     n_workers = max(1, cpu_count())
 
-    out_plot_dir = "outputplotdnew"
-    out_csv_dir = "outputcsvdnew"
+    out_plot_dir = "outputplotdnew1"
+    out_csv_dir = "outputcsvdnew1"
     os.makedirs(out_plot_dir, exist_ok=True)
     os.makedirs(out_csv_dir, exist_ok=True)
 

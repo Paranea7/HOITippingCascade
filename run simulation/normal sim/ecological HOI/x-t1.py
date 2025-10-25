@@ -167,7 +167,7 @@ def plot_evolution(x_history, max_lines=50):
 
 def main():
     # 模型参数
-    s = 100
+    s = 50
     mu_c = 0.0
     sigma_c = 2 * np.sqrt(3) / 9
     mu_d = 0.3
@@ -177,7 +177,7 @@ def main():
     sigma_e = 0.2
 
     # phi_0 设置为比例 0.16（即 16% 的节点拥有非零 c_i）
-    phi_0 = 0.32
+    phi_0 = 0.16
     fixed_c_value = 2.0 * np.sqrt(3.0) / 9.0  # 非零 c 的值
 
     # 生成参数（注意：generate_parameters 中会随机选择 count 个索引赋值为 fixed_c_value）
