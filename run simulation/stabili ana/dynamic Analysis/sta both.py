@@ -1,451 +1,324 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-stability_with_3_overlay_fixed.py
+stability_3d_fullgrid.py
 
-完整脚本：以二体为主的稳定性绘图程序，并在每个二体子图上叠加三体影响（轮廓与可选半透明掩膜）。
-修正点：
- - 正确读取三体参数向量中的 c3（避免 c3 未定义导致的错误）
- - 保证 meshgrid 顺序与 stab arrays 对应
- - 增加诊断输出（stab3 vs stab2 差异计数）
+扩展脚本：把所有线性耦合 d_ij (i != j) 都纳入参数网格遍历，
+并且允许对任意三体项 e_{i,j,k} 指定取值列表进行遍历。
+对每一组参数(所有线性项 + 三体项组合)，在 c1-c2 平面做稳定性扫描（c3 固定为 0）。
+并行策略：
+  - 对单个参数组合（即固定所有 d_ij 与 e_ijk）内，按 c2 的行并行计算（multiprocessing.Pool）。
+  - 参数组合之间按序执行以避免资源耗尽；可通过 MAX_PARALLEL_COMBINATIONS >1 来允许并行执行多组（谨慎使用）。
+注意：参数组合数会迅速爆炸，请合理选择每个参数的取值列表长度。
 """
-import os
-import argparse
+
 import numpy as np
 import matplotlib.pyplot as plt
 import multiprocessing as mp
+import itertools
+import os
+from functools import partial
 from matplotlib.colors import BoundaryNorm
+import time
 
-# ---------------- Parameters (可调) ----------------
-OUTDIR = 'stability_with_3_overlay_results'
-os.makedirs(OUTDIR, exist_ok=True)
+# -------------------------- 用户可调参数 --------------------------
+# 线性耦合 d_ij 列表（i != j）。若某项不想遍历则设为 [0.0]。
+# 示例：保持与原来类似的值范围
+d12_list = [0.0, 0.2, 0.3, 0.5, 0.7, 0.9]
+d21_list = [0.0, -0.2, -0.3, -0.5, -0.7, -0.9]
+# 新增与 x3 的线性耦合（如果只想固定为 0，请设为 [0.0]）
+d13_list = [0.0]   # f1 <- x3
+d31_list = [0.0]   # f3 <- x1
+d23_list = [0.0]   # f2 <- x3
+d32_list = [0.0]   # f3 <- x2
 
-d12_vals = [0.0, 0.2, 0.3, 0.5, 0.7, 0.9]
-d21_vals = [0.0, -0.2, -0.3, -0.5, -0.7, -0.9]
+# 若需遍历所有组合，把上面列表改为需要的值列表（但注意组合数）
 
-# 主网格（用于二体主图，也用于三体比较以便直接覆盖）
+# 三体参数字典：键为 (i,j,k)（1-based）, 值为列表（可只包含 0.0）
+# 示例：原默认只遍历 (1,2,3) 与 (2,3,1)
+EPS_dict_lists = {
+    (1,2,3): [0.2, 0.5],
+    (2,3,1): [-0.2, -0.5],
+    # 若你想在未来加入其它三体项，例如 (1,1,2): [0.0, 0.1], 可在此添加
+    # (1,1,2): [0.0],
+}
+
+# c1-c2 网格参数（可根据需要缩小用于测试）
 c1_min, c1_max, N_c1 = -0.8, 0.8, 200
 c2_min, c2_max, N_c2 = -0.8, 0.8, 200
 c1_arr = np.linspace(c1_min, c1_max, N_c1)
 c2_arr = np.linspace(c2_min, c2_max, N_c2)
 
-# Newton 初值（2-system）
-NX0_2 = 5
-x1s0_2 = np.linspace(-2, 2, NX0_2)
-x2s0_2 = np.linspace(-2, 2, NX0_2)
+# Newton 初值网格（x1,x2,x3）
+NX0 = 5
+x1s0 = np.linspace(-2, 2, NX0)
+x2s0 = np.linspace(-2, 2, NX0)
+x3s0 = np.linspace(-2, 2, NX0)
 
-NEWTON_MAX_IT_2 = 50
-NEWTON_ATOL_2 = 1e-10
-F_TOL_2 = 1e-8
-ROOT_DUP_TOL_2 = 1e-2
+# Newton / 数值参数
+NEWTON_MAX_IT = 80
+NEWTON_ATOL = 1e-10
+F_TOL = 1e-8
+ROOT_DUP_TOL = 1e-2
 
-MAX_STABLE_DISPLAY_2 = 4
-cmap2 = plt.get_cmap('viridis', MAX_STABLE_DISPLAY_2 + 1)
-bounds2 = np.arange(-0.5, MAX_STABLE_DISPLAY_2 + 1.5, 1.0)
-norm2 = BoundaryNorm(boundaries=bounds2, ncolors=cmap2.N, clip=True)
+# 绘图与输出
+MAX_STABLE_DISPLAY = 4
+cmap = plt.get_cmap('viridis', MAX_STABLE_DISPLAY + 1)
+bounds = np.arange(-0.5, MAX_STABLE_DISPLAY + 1.5, 1.0)
+norm = BoundaryNorm(boundaries=bounds, ncolors=cmap.N, clip=True)
 
-# 三体设置（固定 eps）
-EPS_3 = {'eps123': 0.2, 'eps231': -0.2, 'eps312': 0.0, 'eps321': 0.0, 'eps213': 0.0, 'eps132': 0.0}
-C3_FIXED = 0.0
+OUTDIR = 'stability_results_3d_fullgrid'
+os.makedirs(OUTDIR, exist_ok=True)
 
-# Newton 初值（3-system）
-NX0_3 = 5
-x1s0_3 = np.linspace(-2, 2, NX0_3)
-x2s0_3 = np.linspace(-2, 2, NX0_3)
-x3s0_3 = np.linspace(-2, 2, NX0_3)
+# 并行与资源控制
+WORKERS = None  # None -> mp.cpu_count()
+# 同时并行运行的参数组合上限（每个组合内部又会使用 WORKERS 个进程）
+MAX_PARALLEL_COMBINATIONS = 1  # 设为 1 表示参数组合按序执行；>1 则并行运行多个组合（谨慎）
+# ---------------------------------------------------------------
 
-NEWTON_MAX_IT_3 = 80
-NEWTON_ATOL_3 = 1e-10
-F_TOL_3 = 1e-8
-ROOT_DUP_TOL_3 = 1e-4
+# 参考线（可注释）
+ccrit = 2 / (3 * np.sqrt(3))
+dc = ccrit / (1/np.sqrt(3) - (-1/np.sqrt(3)))
 
-MAX_STABLE_DISPLAY_3 = 6
-cmap3 = plt.get_cmap('viridis', MAX_STABLE_DISPLAY_3 + 1)
-bounds3 = np.arange(-0.5, MAX_STABLE_DISPLAY_3 + 1.5, 1.0)
-norm3 = BoundaryNorm(boundaries=bounds3, ncolors=cmap3.N, clip=True)
+# -------------------------- 工具函数 --------------------------
+def make_param_grid(d_lists, eps_lists):
+    """
+    将线性耦合字典与三体 eps 列表组合成参数组合生成器。
+    d_lists: dict with keys ('d12','d21','d13','d31','d23','d32') -> list of floats
+    eps_lists: dict with keys (i,j,k) -> list of floats
+    返回生成器，yield (d_params_dict, eps_dict) 每次为一个具体组合
+    """
+    # 线性参数迭代顺序固定
+    d_keys = ['d12','d21','d13','d31','d23','d32']
+    d_values_list = [d_lists[k] for k in d_keys]
+    # 三体参数列表
+    eps_keys = list(eps_lists.keys())
+    eps_values_list = [eps_lists[k] for k in eps_keys]
 
-# ---------------- Core functions ----------------
-def fixed_points_and_stability_2sys(d21, d12, c1, c2,
-                                   x1s0, x2s0,
-                                   NEWTON_MAX_IT, NEWTON_ATOL, F_TOL, ROOT_DUP_TOL):
-    """二体：用多初值 Newton 找定点并计数稳定个数（不截断）"""
-    roots = []
-    for x10 in x1s0:
-        for x20 in x2s0:
-            x1, x2 = x10, x20
-            f1 = f2 = None
-            for _ in range(NEWTON_MAX_IT):
-                f1 = -x1**3 + x1 + c1 + d21 * x2
-                f2 = -x2**3 + x2 + c2 + d12 * x1
-                J11 = -3 * x1**2 + 1
-                J12 = d21
-                J21 = d12
-                J22 = -3 * x2**2 + 1
-                detJ = J11 * J22 - J12 * J21
-                if abs(detJ) < 1e-14:
-                    break
-                dx1 = ( J22 * f1 - J12 * f2) / detJ
-                dx2 = (-J21 * f1 + J11 * f2) / detJ
-                x1 -= dx1
-                x2 -= dx2
-                if np.hypot(dx1, dx2) < NEWTON_ATOL:
-                    break
+    for d_vals in itertools.product(*d_values_list):
+        d_params = dict(zip(d_keys, d_vals))
+        for eps_vals in itertools.product(*eps_values_list):
+            eps_dict = { eps_keys[i]: eps_vals[i] for i in range(len(eps_keys)) }
+            yield d_params, eps_dict
 
-            if f1 is not None and np.hypot(f1, f2) < F_TOL:
-                duplicate = False
-                for xr in roots:
-                    if np.hypot(x1 - xr[0], x2 - xr[1]) < ROOT_DUP_TOL:
-                        duplicate = True
-                        break
-                if not duplicate:
-                    roots.append([x1, x2])
-
-    n_stable = 0
-    for x1, x2 in roots:
-        J11 = -3 * x1**2 + 1
-        J12 = d21
-        J21 = d12
-        J22 = -3 * x2**2 + 1
-        J = np.array([[J11, J12], [J21, J22]])
-        eigs = np.linalg.eigvals(J)
-        if np.all(np.real(eigs) < 0):
-            n_stable += 1
-    return int(n_stable)
-
-def f_and_J_3(x, c, eps):
-    """三体 f 与雅可比（修正：正确读取 c3）"""
+def three_body_contributions(x, eps_dict):
+    """
+    计算 tb 和 d_tb，参见之前脚本注释
+    """
     x1, x2, x3 = x
-    c1, c2, c3 = c
-    e123 = eps.get('eps123', 0.0); e231 = eps.get('eps231', 0.0); e312 = eps.get('eps312', 0.0)
-    e321 = eps.get('eps321', 0.0); e213 = eps.get('eps213', 0.0); e132 = eps.get('eps132', 0.0)
+    tb = np.zeros(3, dtype=float)
+    d_tb = np.zeros((3,3), dtype=float)
+    for (i,j,k), val in eps_dict.items():
+        if val == 0.0:
+            continue
+        xj = (x1, x2, x3)[j-1]
+        xk = (x1, x2, x3)[k-1]
+        tb[i-1] += val * xj * xk
+        for m_idx, m in enumerate((1,2,3)):
+            contrib = 0.0
+            if m == j:
+                contrib += val * xk
+            if m == k:
+                contrib += val * xj
+            d_tb[i-1, m_idx] += contrib
+    return tb, d_tb
 
-    f1 = -x1**3 + x1 + c1 + e123 * x2 * x3 + e132 * x3 * x2
-    f2 = -x2**3 + x2 + c2 + e231 * x3 * x1 + e213 * x1 * x3
-    f3 = -x3**3 + x3 + c3 + e312 * x1 * x2 + e321 * x2 * x1
-    f = np.array([f1, f2, f3], dtype=float)
+def fixed_points_and_stability_3d(d_params, c1, c2, eps_dict, c3_fixed=0.0):
+    """
+    d_params: dict with keys 'd12','d21','d13','d31','d23','d32'
+    eps_dict: dict {(i,j,k): value}
+    返回：稳定平衡数量（int）
+    """
+    d12 = d_params['d12']
+    d21 = d_params['d21']
+    d13 = d_params['d13']
+    d31 = d_params['d31']
+    d23 = d_params['d23']
+    d32 = d_params['d32']
 
-    J = np.zeros((3,3), dtype=float)
-    J[0,0] = -3.0 * x1**2 + 1.0
-    J[0,1] = e123 * x3 + e132 * x3
-    J[0,2] = e123 * x2 + e132 * x2
-
-    J[1,0] = e231 * x3 + e213 * x3
-    J[1,1] = -3.0 * x2**2 + 1.0
-    J[1,2] = e231 * x1 + e213 * x1
-
-    J[2,0] = e312 * x2 + e321 * x2
-    J[2,1] = e312 * x1 + e321 * x1
-    J[2,2] = -3.0 * x3**2 + 1.0
-
-    return f, J
-
-def find_roots_and_count_stable_3sys(eps, c1, c2, c3_fixed,
-                                     x1s0, x2s0, x3s0,
-                                     NEWTON_MAX_IT, NEWTON_ATOL, F_TOL, ROOT_DUP_TOL):
-    """三体：多初值 Newton，返回稳定点数量"""
-    c_vec = (float(c1), float(c2), float(c3_fixed))
     roots = []
     for x10 in x1s0:
         for x20 in x2s0:
             for x30 in x3s0:
                 x = np.array([x10, x20, x30], dtype=float)
-                f = None
+                converged = False
                 for _ in range(NEWTON_MAX_IT):
-                    f, J = f_and_J_3(x, c_vec, eps)
+                    tb, d_tb = three_body_contributions(x, eps_dict)
+                    f = np.zeros(3, dtype=float)
+                    # 完整线性耦合写出（包含与 x3 的项）
+                    f[0] = -x[0]**3 + x[0] + c1 + d21 * x[1] + d31 * x[2] + tb[0]
+                    f[1] = -x[1]**3 + x[1] + c2 + d12 * x[0] + d32 * x[2] + tb[1]
+                    f[2] = -x[2]**3 + x[2] + c3_fixed + d13 * x[0] + d23 * x[1] + tb[2]
+
+                    # 雅可比（包含线性耦合与三体导数）
+                    J = np.zeros((3,3), dtype=float)
+                    J[0,0] = -3 * x[0]**2 + 1 + d_tb[0,0]
+                    J[1,1] = -3 * x[1]**2 + 1 + d_tb[1,1]
+                    J[2,2] = -3 * x[2]**2 + 1 + d_tb[2,2]
+
+                    J[0,1] = d21 + d_tb[0,1]
+                    J[0,2] = d31 + d_tb[0,2]
+                    J[1,0] = d12 + d_tb[1,0]
+                    J[1,2] = d32 + d_tb[1,2]
+                    J[2,0] = d13 + d_tb[2,0]
+                    J[2,1] = d23 + d_tb[2,1]
+
                     try:
                         dx = np.linalg.solve(J, f)
                     except np.linalg.LinAlgError:
-                        dx = None
                         break
-                    x = x - dx
+                    x_new = x - dx
                     if np.linalg.norm(dx) < NEWTON_ATOL:
+                        x = x_new
+                        converged = True
                         break
-                if f is not None and np.linalg.norm(f) < F_TOL:
-                    is_dup = False
-                    for xr in roots:
-                        if np.linalg.norm(x - xr) < ROOT_DUP_TOL:
-                            is_dup = True
-                            break
-                    if not is_dup:
-                        roots.append(x.copy())
+                    x = x_new
 
+                if converged:
+                    tb_chk, _ = three_body_contributions(x, eps_dict)
+                    f_chk = np.array([
+                        -x[0]**3 + x[0] + c1 + d21 * x[1] + d31 * x[2] + tb_chk[0],
+                        -x[1]**3 + x[1] + c2 + d12 * x[0] + d32 * x[2] + tb_chk[1],
+                        -x[2]**3 + x[2] + c3_fixed + d13 * x[0] + d23 * x[1] + tb_chk[2]
+                    ])
+                    if np.linalg.norm(f_chk) < F_TOL:
+                        duplicate = False
+                        for xr in roots:
+                            if np.linalg.norm(x - xr) < ROOT_DUP_TOL:
+                                duplicate = True
+                                break
+                        if not duplicate:
+                            roots.append(x.copy())
+
+    # 统计稳定根
     n_stable = 0
-    for xr in roots:
-        _, J = f_and_J_3(xr, c_vec, eps)
+    for x in roots:
+        tb, d_tb = three_body_contributions(x, eps_dict)
+        J = np.zeros((3,3), dtype=float)
+        J[0,0] = -3 * x[0]**2 + 1 + d_tb[0,0]
+        J[1,1] = -3 * x[1]**2 + 1 + d_tb[1,1]
+        J[2,2] = -3 * x[2]**2 + 1 + d_tb[2,2]
+
+        J[0,1] = d21 + d_tb[0,1]
+        J[0,2] = d31 + d_tb[0,2]
+        J[1,0] = d12 + d_tb[1,0]
+        J[1,2] = d32 + d_tb[1,2]
+        J[2,0] = d13 + d_tb[2,0]
+        J[2,1] = d23 + d_tb[2,1]
+
         eigs = np.linalg.eigvals(J)
-        if np.all(np.real(eigs) < 0.0):
+        if np.all(np.real(eigs) < 0):
             n_stable += 1
     return int(n_stable)
 
-# ---------------- Row compute for parallel processing ----------------
-def compute_row_2sys(i_row, d21, d12, c1_arr_local, c2_arr_local, params2):
-    c2_val = c2_arr_local[i_row]
-    row = np.empty(c1_arr_local.shape, dtype=np.int32)
-    for j, c1_val in enumerate(c1_arr_local):
-        n = fixed_points_and_stability_2sys(d21, d12, c1_val, c2_val,
-                                            params2['x1s0'], params2['x2s0'],
-                                            params2['NEWTON_MAX_IT'], params2['NEWTON_ATOL'],
-                                            params2['F_TOL'], params2['ROOT_DUP_TOL'])
-        row[j] = int(min(n, params2['MAX_STABLE_DISPLAY']))
+# -------------------------- 并行按行计算 --------------------------
+def compute_row(i_row, d_params, eps_dict):
+    c2_val = c2_arr[i_row]
+    row = np.empty(N_c1, dtype=np.int32)
+    for j, c1_val in enumerate(c1_arr):
+        row[j] = fixed_points_and_stability_3d(d_params, c1_val, c2_val, eps_dict)
     return (i_row, row)
 
-def compute_row_3sys(i_row, eps, c1_arr_local, c2_arr_local, params3):
-    c2_val = c2_arr_local[i_row]
-    row = np.empty(c1_arr_local.shape, dtype=np.int32)
-    for j, c1_val in enumerate(c1_arr_local):
-        n = find_roots_and_count_stable_3sys(eps, c1_val, c2_val, params3['C3_FIXED'],
-                                            params3['x1s0'], params3['x2s0'], params3['x3s0'],
-                                            params3['NEWTON_MAX_IT'], params3['NEWTON_ATOL'],
-                                            params3['F_TOL'], params3['ROOT_DUP_TOL'])
-        row[j] = int(min(n, params3['MAX_STABLE_DISPLAY']))
-    return (i_row, row)
-
-# ---------------- Compute full stab map for a pair (d12,d21) ----------------
-def compute_pair_with_3_overlay(d21, d12, params2, params3, workers=None, save=True, plot=True, overlay3=True, outdir=OUTDIR, overlay3_mask=True):
+def compute_stab_map_for_params(d_params, eps_dict, workers=None, save=True, plot=True):
     """
-    计算：
-      - 二体 stab_map（并保存 .npy 与 PNG）
-      - 三体 stab_map（并保存 .npy）
-      - 如果 overlay3=True：在二体 PNG 上叠加三体轮廓与可选半透明掩膜并保存
+    对单个参数组合（d_params, eps_dict）计算整个 c1-c2 stab_map。
+    返回 stab_map (N_c2, N_c1)
     """
-    num_workers = workers if workers is not None else max(1, mp.cpu_count() - 1)
-    print(f'Processing pair d12={d12}, d21={d21} with {num_workers} workers; overlay3={overlay3}')
+    num_workers = workers if workers is not None else max(1, mp.cpu_count() - 0)
+    print(f'Computing stab_map for params: d={d_params}, eps={eps_dict} using {num_workers} workers')
+    stab_map = np.zeros((N_c2, N_c1), dtype=np.int32)
 
-    c1_arr_local = np.linspace(c1_min, c1_max, N_c1)
-    c2_arr_local = np.linspace(c2_min, c2_max, N_c2)
-
-    # 1) compute 2sys
-    stab2 = np.zeros((N_c2, N_c1), dtype=np.int32)
     with mp.Pool(processes=num_workers) as pool:
-        tasks = [pool.apply_async(compute_row_2sys, args=(i, d21, d12, c1_arr_local, c2_arr_local, params2)) for i in range(N_c2)]
-        for idx, t in enumerate(tasks):
-            i_row, row = t.get()
-            stab2[i_row, :] = row
+        tasks = [pool.apply_async(compute_row, args=(i_row, d_params, eps_dict)) for i_row in range(N_c2)]
+        for idx, task in enumerate(tasks):
+            i_row, row = task.get()
+            stab_map[i_row, :] = row
             if (idx+1) % max(1, N_c2//8) == 0 or (idx+1) == N_c2:
-                print(f'  [2sys {d12},{d21}] rows {idx+1}/{N_c2}')
+                print(f'  row progress: {idx+1}/{N_c2}')
 
     if save:
-        fn2 = os.path.join(outdir, f'stabmap_2sys_d12_{d12}_d21_{d21}.npy')
-        np.save(fn2, stab2)
-        print('  saved', fn2)
+        # construct tag
+        d_tag = '_'.join([f'{k}{d_params[k]:+.3f}' for k in sorted(d_params.keys())])
+        eps_tag = '__'.join([f'e{"".join(map(str,k))}_{v:+.3f}' for k,v in sorted(eps_dict.items())])
+        tag = f'{d_tag}__{eps_tag}'
+        fn_npy = os.path.join(OUTDIR, f'stabmap__{tag}.npy')
+        np.save(fn_npy, stab_map)
+        print(f'  saved {fn_npy}')
 
-    # 2) compute 3sys (on same grid) if overlay requested
-    stab3 = None
-    if overlay3:
-        eps = EPS_3.copy()
-        stab3 = np.zeros((N_c2, N_c1), dtype=np.int32)
-        with mp.Pool(processes=num_workers) as pool:
-            tasks = [pool.apply_async(compute_row_3sys, args=(i, eps, c1_arr_local, c2_arr_local, params3)) for i in range(N_c2)]
-            for idx, t in enumerate(tasks):
-                i_row, row = t.get()
-                stab3[i_row, :] = row
-                if (idx+1) % max(1, N_c2//8) == 0 or (idx+1) == N_c2:
-                    print(f'  [3sys] rows {idx+1}/{N_c2}')
-
-        if save:
-            fn3 = os.path.join(outdir, f'stabmap_3sys_eps123_{eps["eps123"]}_eps231_{eps["eps231"]}_d12_{d12}_d21_{d21}.npy')
-            np.save(fn3, stab3)
-            print('  saved', fn3)
-
-    # 3) plot 2sys (base) and overlay 3sys contours/mask
     if plot:
         fig, ax = plt.subplots(figsize=(5,4))
-        im = ax.imshow(stab2, extent=(c1_min, c1_max, c2_min, c2_max),
-                       origin='lower', cmap=cmap2, norm=norm2, aspect='auto')
-        ax.set_title(f'2-sys d12={d12}, d21={d21}')
+        ax.imshow(stab_map, extent=(c1_min, c1_max, c2_min, c2_max),
+                  origin='lower', cmap=cmap, norm=norm, aspect='auto')
+        ax.set_title(tag, fontsize=8)
         ax.set_xlabel('c1'); ax.set_ylabel('c2')
-
-        # overlay: contours showing levels of stab3 (if computed)
-        if (stab3 is not None):
-            # diagnostic: 确认 stab3 与 stab2 的差异
-            diff = stab3.astype(int) - stab2.astype(int)
-            nz = int(np.count_nonzero(diff))
-            print(f'  [diag] stab3 vs stab2 diff nonzero count = {nz}, min={diff.min()}, max={diff.max()}, mean={diff.mean():.3f}')
-
-            # contour levels — 我们绘制 stab3 的整数水平线
-            levels = np.arange(0, min(params3['MAX_STABLE_DISPLAY'], MAX_STABLE_DISPLAY_3) + 1)
-            # 为 contour 需要网格，注意 meshgrid(c1_arr_local, c2_arr_local) 以匹配 stab arrays shape (N_c2, N_c1)
-            C1, C2 = np.meshgrid(c1_arr_local, c2_arr_local)
-            cs = ax.contour(C1, C2, stab3, levels=levels, colors='k', linewidths=0.6, alpha=0.9)
-            try:
-                ax.clabel(cs, fmt='%d', fontsize=6)
-            except Exception:
-                pass
-
-            # 半透明掩膜：标记 stab3 > stab2 区域（增加，红）和 stab3 < stab2 区域（减少，蓝）
-            if overlay3_mask:
-                mask_inc = diff > 0
-                mask_dec = diff < 0
-                if np.any(mask_inc):
-                    ax.imshow(np.where(mask_inc, 1.0, np.nan), extent=(c1_min, c1_max, c2_min, c2_max),
-                              origin='lower', cmap=plt.cm.Reds, alpha=0.25, vmin=0, vmax=1, aspect='auto')
-                if np.any(mask_dec):
-                    ax.imshow(np.where(mask_dec, 1.0, np.nan), extent=(c1_min, c1_max, c2_min, c2_max),
-                              origin='lower', cmap=plt.cm.Blues, alpha=0.20, vmin=0, vmax=1, aspect='auto')
-
-        cbar = plt.colorbar(plt.cm.ScalarMappable(norm=norm2, cmap=cmap2), ax=ax,
-                            boundaries=bounds2, ticks=np.arange(0, params2['MAX_STABLE_DISPLAY']+1))
-        cbar.set_label('number of stable equilibria (2-sys, capped)')
-        out_png = os.path.join(outdir, f'stabmap_2sys_with3overlay_d12_{d12}_d21_{d21}.png')
+        ax.axhline(dc, color='w', lw=1, ls='--'); ax.axhline(-dc, color='w', lw=1, ls='--')
+        ax.axvline(dc, color='w', lw=1, ls='--'); ax.axvline(-dc, color='w', lw=1, ls='--')
+        cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax,
+                            boundaries=bounds, ticks=np.arange(0, MAX_STABLE_DISPLAY+1))
+        cbar.set_label('number of stable equilibria')
+        out_png = os.path.join(OUTDIR, f'stabmap__{tag}.png')
         fig.tight_layout()
         plt.savefig(out_png, dpi=200)
         plt.close(fig)
-        print('  saved', out_png)
+        print(f'  saved {out_png}')
 
-    return stab2, stab3
+    return stab_map
 
-# ---------------- Combined grid figure for all pairs (2sys with overlay if available) ----------------
-def make_combined_grid_with_overlay(all_pairs_maps_2, all_pairs_maps_3, d12_vals, d21_vals, outfn=None, outdir=OUTDIR, overlay3_mask=True):
-    nrow = len(d21_vals); ncol = len(d12_vals)
-    fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(3*ncol, 2.5*nrow))
-    axes = np.atleast_2d(axes)
-    cmap = plt.get_cmap('viridis', MAX_STABLE_DISPLAY_2 + 1)
-    bounds = np.arange(-0.5, MAX_STABLE_DISPLAY_2 + 1.5, 1.0)
-    norm = BoundaryNorm(boundaries=bounds, ncolors=cmap.N, clip=True)
+# -------------------------- 主执行函数 --------------------------
+def run_all_parameter_combinations(d_lists_dict, eps_lists_dict, workers=None, max_parallel_combinations=1):
+    """
+    d_lists_dict: dict of lists for d12..d32
+    eps_lists_dict: dict of lists for e_{i,j,k}
+    max_parallel_combinations: 同时对多个参数组合并行执行的上限（每个组合内部又使用 workers）
+    """
+    # 生成参数组合列表（注意可能非常大）
+    combos = list(make_param_grid(d_lists_dict, eps_lists_dict))
+    print(f'Number of parameter combinations to process: {len(combos)}')
+    if len(combos) == 0:
+        return {}
 
-    for i_row, d21 in enumerate(d21_vals):
-        for i_col, d12 in enumerate(d12_vals):
-            ax = axes[i_row, i_col]
-            stab2 = all_pairs_maps_2.get((d12, d21))
-            stab3 = all_pairs_maps_3.get((d12, d21))
-            if stab2 is None:
-                ax.text(0.5, 0.5, 'missing', ha='center', va='center')
-                ax.axis('off')
-                continue
-            ax.imshow(stab2, extent=(c1_min, c1_max, c2_min, c2_max),
-                      origin='lower', cmap=cmap, norm=norm, aspect='auto')
-            ax.set_title(f'd12={d12}, d21={d21}', fontsize=8)
-            ax.set_xticks([]); ax.set_yticks([])
-
-            if stab3 is not None:
-                C1, C2 = np.meshgrid(c1_arr, c2_arr)
-                levels = np.arange(0, min(params3_global['MAX_STABLE_DISPLAY'], MAX_STABLE_DISPLAY_3) + 1)
-                cs = ax.contour(C1, C2, stab3, levels=levels, colors='k', linewidths=0.4, alpha=0.9)
-
-                diff = stab3.astype(int) - stab2.astype(int)
-                mask_inc = diff > 0
-                mask_dec = diff < 0
-                if overlay3_mask:
-                    if np.any(mask_inc):
-                        ax.imshow(np.where(mask_inc, 1.0, np.nan), extent=(c1_min, c1_max, c2_min, c2_max),
-                                  origin='lower', cmap=plt.cm.Reds, alpha=0.18, vmin=0, vmax=1, aspect='auto')
-                    if np.any(mask_dec):
-                        ax.imshow(np.where(mask_dec, 1.0, np.nan), extent=(c1_min, c1_max, c2_min, c2_max),
-                                  origin='lower', cmap=plt.cm.Blues, alpha=0.12, vmin=0, vmax=1, aspect='auto')
-
-    fig.subplots_adjust(right=0.92, wspace=0.4, hspace=0.6)
-    cbar_ax = fig.add_axes([0.94, 0.15, 0.02, 0.7])
-    cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap),
-                      cax=cbar_ax, boundaries=bounds, ticks=np.arange(0, MAX_STABLE_DISPLAY_2+1))
-    cb.set_label('number of stable equilibria (2-sys)')
-    if outfn is None:
-        outfn = os.path.join(outdir, 'combined_stabmap_grid_2sys_with3overlay.png')
-    fig.suptitle('2-system stability maps with 3-system overlay (eps123=0.2, eps231=-0.2)', fontsize=14)
-    fig.tight_layout(rect=[0, 0, 0.92, 0.96])
-    plt.savefig(outfn, dpi=200)
-    plt.close(fig)
-    print('Combined figure saved to', outfn)
-
-# ---------------- Global params holder for plotting combined (set later) ----------------
-params3_global = None
-
-# ---------------- Main runner ----------------
-def main(do_overlay=True, workers=None, quick=False, outdir=OUTDIR, overlay3_mask=True):
-    global params3_global
-    if quick:
-        Nc1 = 80; Nc2 = 80
-        c1_local = np.linspace(c1_min, c1_max, Nc1)
-        c2_local = np.linspace(c2_min, c2_max, Nc2)
-        p2 = {
-            'x1s0': np.linspace(-1.5,1.5,3),
-            'x2s0': np.linspace(-1.5,1.5,3),
-            'NEWTON_MAX_IT': 40,
-            'NEWTON_ATOL': NEWTON_ATOL_2,
-            'F_TOL': F_TOL_2,
-            'ROOT_DUP_TOL': ROOT_DUP_TOL_2,
-            'MAX_STABLE_DISPLAY': MAX_STABLE_DISPLAY_2
-        }
-        p3 = {
-            'x1s0': np.linspace(-1.5,1.5,3),
-            'x2s0': np.linspace(-1.5,1.5,3),
-            'x3s0': np.linspace(-1.5,1.5,3),
-            'NEWTON_MAX_IT': 60,
-            'NEWTON_ATOL': NEWTON_ATOL_3,
-            'F_TOL': F_TOL_3,
-            'ROOT_DUP_TOL': ROOT_DUP_TOL_3,
-            'MAX_STABLE_DISPLAY': MAX_STABLE_DISPLAY_3,
-            'C3_FIXED': C3_FIXED
-        }
+    all_maps = {}
+    # 如果允许并行执行多个参数组合，使用 Pool 管理，否则顺序执行
+    if max_parallel_combinations <= 1:
+        # 顺序逐个执行（每个内部使用 pool 并行 c2 行）
+        for idx, (d_params, eps_dict) in enumerate(combos):
+            print(f'=== Processing combo {idx+1}/{len(combos)} ===')
+            stab_map = compute_stab_map_for_params(d_params, eps_dict, workers=workers, save=True, plot=True)
+            all_maps[(tuple(sorted(d_params.items())), tuple(sorted(eps_dict.items())))] = stab_map
     else:
-        Nc1 = N_c1; Nc2 = N_c2
-        c1_local = c1_arr; c2_local = c2_arr
-        p2 = {
-            'x1s0': x1s0_2,
-            'x2s0': x2s0_2,
-            'NEWTON_MAX_IT': NEWTON_MAX_IT_2,
-            'NEWTON_ATOL': NEWTON_ATOL_2,
-            'F_TOL': F_TOL_2,
-            'ROOT_DUP_TOL': ROOT_DUP_TOL_2,
-            'MAX_STABLE_DISPLAY': MAX_STABLE_DISPLAY_2
-        }
-        p3 = {
-            'x1s0': x1s0_3,
-            'x2s0': x2s0_3,
-            'x3s0': x3s0_3,
-            'NEWTON_MAX_IT': NEWTON_MAX_IT_3,
-            'NEWTON_ATOL': NEWTON_ATOL_3,
-            'F_TOL': F_TOL_3,
-            'ROOT_DUP_TOL': ROOT_DUP_TOL_3,
-            'MAX_STABLE_DISPLAY': MAX_STABLE_DISPLAY_3,
-            'C3_FIXED': C3_FIXED
-        }
+        # 并行执行多个参数组合，但要注意资源：每个组合内部又会占用 workers 进程
+        # 我们采用进程池提交 compute_stab_map_for_params 的调用（每个调用会再启动进程池 -> 可引发嵌套池问题）
+        # 为避免嵌套 Pool 的复杂性，建议将 compute_stab_map_for_params 改写为非嵌套（如在子进程内直接做顺序计算）
+        raise NotImplementedError("Parallel execution across parameter combinations is not implemented due to nested-pool complexity. "
+                                  "Set MAX_PARALLEL_COMBINATIONS=1 (default) or request implementation using joblib/dask.")
 
-    # set global for combined plotting
-    params3_global = p3
+    return all_maps
 
-    all_maps_2 = {}
-    all_maps_3 = {}
-
-    # iterate pairs
-    for d12 in d12_vals:
-        for d21 in d21_vals:
-            stab2, stab3 = compute_pair_with_3_overlay(d21, d12, p2, p3, workers=workers, save=True, plot=True, overlay3=do_overlay, outdir=outdir, overlay3_mask=overlay3_mask)
-            all_maps_2[(d12, d21)] = stab2
-            if stab3 is not None:
-                all_maps_3[(d12, d21)] = stab3
-
-    # combined grid (2sys base with overlays from computed 3sys)
-    make_combined_grid_with_overlay(all_maps_2, all_maps_3, d12_vals, d21_vals, outfn=None, outdir=outdir, overlay3_mask=overlay3_mask)
-
-# ---------------- CLI ----------------
+# -------------------------- 运行脚本 --------------------------
 if __name__ == '__main__':
-    p = argparse.ArgumentParser(description='Compute 2-system stability maps and overlay 3-system results (contours + optional masks).')
-    p.add_argument('--no-3overlay', action='store_true', help='Do not compute/overlay 3-system results.')
-    p.add_argument('--workers', type=int, default=-1, help='Number of worker processes (-1 => cpu_count()-1).')
-    p.add_argument('--quick', action='store_true', help='Quick mode: smaller grids and fewer initial guesses.')
-    p.add_argument('--outdir', type=str, default=OUTDIR, help='Output directory.')
-    p.add_argument('--no-masks', action='store_true', help='Do not draw red/blue masks for increases/decreases; keep contours only.')
-    args = p.parse_args()
+    start_time = time.time()
 
-    outdir = args.outdir
-    os.makedirs(outdir, exist_ok=True)
+    # 组织线性参数字典供遍历
+    d_lists_dict = {
+        'd12': d12_list,
+        'd21': d21_list,
+        'd13': d13_list,
+        'd31': d31_list,
+        'd23': d23_list,
+        'd32': d32_list
+    }
 
-    if args.workers is None or args.workers < 0:
-        workers = max(1, mp.cpu_count() - 1)
-    elif args.workers == 0:
-        workers = 1
-    else:
-        workers = args.workers
+    # 三体参数列表字典（EPS_dict_lists 已在顶部定义）
+    eps_lists_dict = EPS_dict_lists
 
-    # allow multiprocessing start method best-effort
-    try:
-        if os.name == 'posix':
-            mp.set_start_method('fork', force=False)
-        else:
-            mp.set_start_method('spawn', force=False)
-    except Exception:
-        pass
+    # 检查预计组合数量，给出提示
+    n_d_comb = np.prod([len(v) for v in d_lists_dict.values()])
+    n_eps_comb = np.prod([len(v) for v in eps_lists_dict.values()]) if len(eps_lists_dict)>0 else 1
+    print(f'Will iterate over {n_d_comb} linear-coupling combos and {n_eps_comb} eps combos -> total {n_d_comb*n_eps_comb} parameter combos')
 
-    print('Starting. overlay3=', not args.no_3overlay, 'workers=', workers, 'quick=', args.quick, 'masks=', not args.no_masks)
-    main(do_overlay=(not args.no_3overlay), workers=workers, quick=args.quick, outdir=outdir, overlay3_mask=(not args.no_masks))
-    print('Finished. Results saved in', outdir)
+    # 强烈建议测试时把 N_c1,N_c2,NX0 调小以便快速反馈
+
+    all_maps = run_all_parameter_combinations(d_lists_dict, eps_lists_dict, workers=WORKERS, max_parallel_combinations=MAX_PARALLEL_COMBINATIONS)
+
+    elapsed = time.time() - start_time
+    print(f'All done. Elapsed time: {elapsed:.1f} s')

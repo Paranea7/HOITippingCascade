@@ -19,6 +19,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Pool, cpu_count
+from itertools import product
 
 # ----------------- 核心模型（可根据需要调整） -----------------
 def generate_parameters(s, mu_d, sigma_d, rho_d, mu_e, sigma_e):
@@ -149,7 +150,7 @@ def run_scan_for_combo(s, mu_e, sigma_e,
     返回 CSV 路径、PNG 路径
     """
     if n_workers is None:
-        n_workers = max(1, cpu_count()-1)
+        n_workers = max(1, cpu_count())
 
     n_phi = len(phi_list)
     n_sigma = len(sigma_d_values)
@@ -199,7 +200,7 @@ def run_scan_for_combo(s, mu_e, sigma_e,
             survival_means[i_phi, j_sigma] = mean_surv
             survival_ses[i_phi, j_sigma] = se_surv
 
-    prefix = f"s_{s}_mue_{mu_e}_sigmae_{sigma_e}_phi_scan"
+    prefix = f"s_{s}_mue_{mu_e:.6g}_sigmae_{sigma_e:.6g}_phi_scan"
     csv_path = save_results_csv(phi_list, sigma_d_values, survival_means, survival_ses, out_csv_dir, prefix)
     plot_path = plot_survival_vs_phi(phi_list, sigma_d_values, survival_means, survival_ses, out_plot_dir, prefix)
 
@@ -209,8 +210,9 @@ def run_scan_for_combo(s, mu_e, sigma_e,
 def parse_args():
     p = argparse.ArgumentParser(description="Scan phi_0 vs survival rate.")
     p.add_argument('--s', type=int, default=100, help='system size (number of species)')
-    p.add_argument('--mu-e', type=float, default=0.3, help='mu_e')
-    p.add_argument('--sigma-e', type=float, default=0.3, help='sigma_e')
+    # 新增：mu_e 与 sigma_e 列表（兼容单值）
+    p.add_argument('--mu-e-list', type=str, default='0.0,0.1,0.2,0.3,0.5', help='comma-separated mu_e values')
+    p.add_argument('--sigma-e-list', type=str, default='0.0,0.1,0.2,0.3,0.5', help='comma-separated sigma_e values')
     p.add_argument('--mu-d', type=float, default=0.3, help='(single) mu_d value - if you want multiple mu_d, pass comma list and edit code accordingly')
     p.add_argument('--sigma-d-list', type=str, default='0.5', help='comma-separated sigma_d values (each will be a curve)')
     p.add_argument('--phi-list', type=str, default='0.0,0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9', help='comma-separated phi_0 values (fractions or absolute depending on --phi-absolute)')
@@ -221,21 +223,26 @@ def parse_args():
     p.add_argument('--out-plot-dir', type=str, default='out_phi_plots', help='plot output dir')
     p.add_argument('--out-csv-dir', type=str, default='out_phi_csv', help='csv output dir')
     p.add_argument('--dry-run', action='store_true', help='only print planned combos')
-    p.add_argument('--max-combos', type=int, default=1, help='limit combos (s,mu_e,sigma_e) to run')
+    p.add_argument('--max-combos', type=int, default=None, help='limit combos (s,mu_e,sigma_e) to run')
     return p.parse_args()
 
 def main():
     args = parse_args()
 
-    # 用户可以在命令行传入多个 sigma_d（逗号分割）
+    # 解析 sigma_d、phi_list
     sigma_d_values = [float(x) for x in args.sigma_d_list.split(',') if x.strip()!='']
-    # 用户传入 phi 列表（逗号分割）
     phi_list = [float(x) for x in args.phi_list.split(',') if x.strip()!='']
+
+    # 解析 mu_e 和 sigma_e 列表，并构造组合
+    mu_e_list = [float(x) for x in args.mu_e_list.split(',') if x.strip()!='']
+    sigma_e_list = [float(x) for x in args.sigma_e_list.split(',') if x.strip()!='']
+
+    combos = list(product(mu_e_list, sigma_e_list))  # 每个组合 (mu_e, sigma_e)
+    if args.max_combos is not None:
+        combos = combos[:args.max_combos]
 
     # 其余参数
     s = args.s
-    mu_e = args.mu_e
-    sigma_e = args.sigma_e
     mu_d = args.mu_d  # 当前实现只用到单个 mu_d；如需多个 mu_d 可扩展
     mu_d_values = [float(mu_d)]
     rho_d = 1.0
@@ -251,22 +258,19 @@ def main():
     os.makedirs(out_plot_dir, exist_ok=True)
     os.makedirs(out_csv_dir, exist_ok=True)
 
-    combos = [(s, mu_e, sigma_e)]
-    if args.max_combos is not None:
-        combos = combos[:args.max_combos]
-
     if args.dry_run:
         print("Dry run: planned runs")
-        print(" combos:", combos)
+        print(" combos (mu_e, sigma_e):", combos)
         print(" sigma_d_values:", sigma_d_values)
         print(" phi_list:", phi_list)
         print(" sims_per_point:", sims_per_point)
         return
 
-    for idx, (s_val, mu_e_val, sigma_e_val) in enumerate(combos, 1):
-        print(f"[{idx}/{len(combos)}] Running s={s_val}, mu_e={mu_e_val}, sigma_e={sigma_e_val}")
+    # 注意：为了区分不同组合，逐一运行每个组合
+    for idx, (mu_e_val, sigma_e_val) in enumerate(combos, 1):
+        print(f"[{idx}/{len(combos)}] Running s={s}, mu_e={mu_e_val}, sigma_e={sigma_e_val}")
         csv_path, plot_path, means, ses = run_scan_for_combo(
-            s_val, mu_e_val, sigma_e_val,
+            s, mu_e_val, sigma_e_val,
             mu_d_values, sigma_d_values,
             mu_c, sigma_c, rho_d,
             phi_list, t_steps, sims_per_point,
