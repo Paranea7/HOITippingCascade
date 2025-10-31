@@ -133,11 +133,11 @@ def parallel_dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps, n_jobs=1,
 
 def plot_final_state_distribution(final_states):
     plt.figure(figsize=(10, 6))
-    plt.hist(final_states, bins=100, density=True, alpha=0.6, color='b', edgecolor='black')
+    plt.hist(final_states, bins=5, density=True, alpha=0.6, color='b', edgecolor='black')
     plt.title('Final State Distribution')
     plt.xlabel('System State (x)')
     plt.ylabel('Density')
-    plt.xlim(-1.6, 1.6)
+    plt.xlim(-1.8,1.8)
     plt.grid()
     plt.show()
 
@@ -167,17 +167,17 @@ def plot_evolution(x_history, max_lines=50):
 
 def main():
     # 模型参数
-    s = 50
+    s = 100
     mu_c = 0.0
     sigma_c = 2 * np.sqrt(3) / 9
     mu_d = 0.3
-    sigma_d = 0.4
-    rho_d = 1.0
-    mu_e = 0.05
-    sigma_e = 0.2
+    sigma_d = 0.3
+    rho_d = 0.0
+    mu_e = 0.5
+    sigma_e = 0.4
 
     # phi_0 设置为比例 0.16（即 16% 的节点拥有非零 c_i）
-    phi_0 = 0.16
+    phi_0 = 0.1
     fixed_c_value = 2.0 * np.sqrt(3.0) / 9.0  # 非零 c 的值
 
     # 生成参数（注意：generate_parameters 中会随机选择 count 个索引赋值为 fixed_c_value）
@@ -186,8 +186,8 @@ def main():
     )
 
     # 初始条件和步数
-    x_init = np.full(s, 0.2)  # 你原脚本中为 0.16
-    t_steps = 500
+    x_init = np.random.normal(0.,0.01,s)  # 你原脚本中为 0.16
+    t_steps = 1500
 
     # 并行参数：n_jobs 为 joblib 并行进程数，repeats 表示重复独立运行的次数（每次 dynamics_simulation 返回 t_steps 行数据）
     n_jobs = 16

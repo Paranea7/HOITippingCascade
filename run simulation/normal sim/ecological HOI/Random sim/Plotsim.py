@@ -24,8 +24,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # 可配置常量
-CSV_DIR_DEFAULT = "outputcsvd0.6"
-OUT_DIR_DEFAULT = "compare_plots"
+CSV_DIR_DEFAULT = "outputcsvd0"
+OUT_DIR_DEFAULT = "compare_plotsrho0"
 FNAME_RE = re.compile(r"s_(?P<s>\d+)_mue_(?P<mu_e>[\d\.]+)_sigmae_(?P<sigma_e>[\d\.]+)\.csv")
 
 def find_csv_files(csv_dir):
