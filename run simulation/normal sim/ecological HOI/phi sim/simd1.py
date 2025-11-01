@@ -229,8 +229,8 @@ def main():
     sigma_d_values = np.linspace(0.0, 1.0, 21)
 
     # ----- 运行参数（请根据机器资源调整） -----
-    t_steps = 700
-    simulations_per_sigma = 50
+    t_steps = 1700
+    simulations_per_sigma = 500
 
     n_workers = max(1, cpu_count())
 
