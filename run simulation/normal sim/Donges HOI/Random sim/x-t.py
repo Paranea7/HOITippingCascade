@@ -94,23 +94,23 @@ def plot_evolution(x_history):
 
 
 def main():
-    s = 100
+    s = 50
     mu_c = 0.0
     sigma_c = 2*np.sqrt(3)/9
     mu_d = 0.3
     sigma_d = 0.4
     rho_d = 0.0
-    mu_e = 0.3
+    mu_e = 0.2
     sigma_e = 0.2
 
     c_i, d_ij, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
-    x_init = np.random.normal(0, 0.01, s)
-    t_steps = 1000
+    x_init = np.random.normal(-0.6, 0.01, s)
+    t_steps = 2000
 
     # 使用并行处理进行模拟
     x_history = parallel_dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps, n_jobs=1)
 
-    plot_final_state_distribution(x_history[999, :])  # Plot final state distribution
+    plot_final_state_distribution(x_history[1999, :])  # Plot final state distribution
     plot_evolution(x_history)  # Plot evolution of x
 
 

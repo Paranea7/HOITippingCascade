@@ -99,21 +99,21 @@ def run_one_parameter_combo(s, mu_e, sigma_e,
 def main():
     mu_c = 0.0
     sigma_c = 2.0 * np.sqrt(3.0) / 9.0
-    rho_d = 0.0
+    rho_d = 1.0
 
-    s_values = [10,30,50,100]
-    mu_e_values = [0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
-    sigma_e_values = [0.0,0.1,0.2,0.3,0.5,0.7,1.0]
+    s_values = [50]
+    mu_e_values = [0.8]
+    sigma_e_values = [0.1,0.2,0.3,0.5,0.7,1.0]
 
     mu_d_values = [0.1,0.2, 0.3, 0.4,0.5,0.6,0.7,0.8,0.9,1.0]
     sigma_d_values = np.linspace(0.0, 1.0, 21)
 
     t_steps = 2000
-    simulations_per_sigma = 500
+    simulations_per_sigma = 100
 
     n_workers = max(1, cpu_count())
 
-    out_csv_dir = "outputcsvdrandom0"
+    out_csv_dir = "outputcsvdrandom1"
     os.makedirs(out_csv_dir, exist_ok=True)
 
     generated_files = []
