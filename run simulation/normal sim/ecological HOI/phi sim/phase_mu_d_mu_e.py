@@ -3,7 +3,6 @@
 phase_mu_d_mu_e.py
 
 在 mu_d x mu_e 网格上计算系统的存活率相图（heatmap），固定：
-- s=30（可通过命令行修改）
 - sigma_d = sigma_e = 0.5（固定）
 - c_i 的生成：phi_0=0.3 的比例随机选择被设置为 c_high=2.0*sqrt(3)/9，其余为 0
 - 网格为 mu_d x mu_e，默认 100x100，范围均为 [0,1]
@@ -11,11 +10,8 @@ phase_mu_d_mu_e.py
 用法示例:
     python phase_mu_d_mu_e.py --nx 100 --ny 100 --repeats 10 --t_steps 2000 --parallel
 
-注意：
-- 并行模式在 Windows 上要确保在 if __name__ == '__main__' 下运行（脚本已如此）。
-- 运行时间随 repeats、t_steps、网格大小线性增长。
+注意：并行模式在 Windows 上要确保在 if __name__ == '__main__' 下运行（脚本已如此）。
 """
-
 import os
 import csv
 import argparse
@@ -43,7 +39,7 @@ def generate_parameters(s, phi_0, c_high, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     # 生成与 d_ij 相关的 d_ji（相关系数 rho_d）
     d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * np.random.normal(mu_d / s, sigma_d / s, (s, s))
 
-    # 三体耦合（按 s^2 缩放）
+    # 三体耦合（按 s^2 缩放)
     e_ijk = np.random.normal(mu_e / s**2, sigma_e / s**2, (s, s, s))
     return c_i, d_ij, d_ji, e_ijk
 
@@ -79,15 +75,27 @@ def calculate_survival_rate(final_states):
     total = len(final_states)
     return float(survival) / float(total)
 
-def single_simulation_once(s, phi_0, c_high, mu_d, sigma_d_used, rho_d, mu_e, sigma_e_used, t_steps, x0=0.6):
+def single_simulation_once(s, phi_0, c_high, mu_d, sigma_d_used, rho_d, mu_e, sigma_e_used, t_steps, x0=-0.6):
     """
     执行一次随机参数生成 + 动力学积分，返回单次存活率（float）。
-    sigma_d_used 和 sigma_e_used 固定为 0.5（由调用方传入）
+    sigma_d_used 和 sigma_e_used 由调用方传入（固定为 0.5）
     """
     c_i, _, d_ji, e_ijk = generate_parameters(s, phi_0, c_high, mu_d, sigma_d_used, rho_d, mu_e, sigma_e_used)
     x_init = np.full(s, x0, dtype=float)
     final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)
     return calculate_survival_rate(final_states)
+
+# -------------------- 并行 worker（模块级，避免 pickle 问题） --------------------
+
+def worker_task(params):
+    """
+    模块级 worker 函数，接收参数元组并返回该格点平均生存率。
+    params: (s, phi_0, c_high, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps, repeats)
+    """
+    s_local, phi_0_local, c_high_local, mu_d_local, sigma_d_local, rho_d_local, mu_e_local, sigma_e_local, t_steps_local, repeats_local = params
+    vals = [single_simulation_once(s_local, phi_0_local, c_high_local, mu_d_local, sigma_d_local, rho_d_local, mu_e_local, sigma_e_local, t_steps_local)
+            for _ in range(repeats_local)]
+    return float(np.mean(vals))
 
 # -------------------- 网格计算与并行支持（mu_d x mu_e 网格） --------------------
 
@@ -99,7 +107,7 @@ def compute_grid(s,
                  mu_d_vals,
                  mu_e_vals,
                  t_steps=2000,
-                 repeats=50,
+                 repeats=1,
                  use_parallel=False,
                  n_workers=None):
     """
@@ -108,12 +116,13 @@ def compute_grid(s,
     返回：mu_d_vals, mu_e_vals, grid (shape: len(mu_e_vals) x len(mu_d_vals))
     """
     if n_workers is None:
+        # 默认保留一个核心给系统或其他任务
         n_workers = max(1, cpu_count())
 
-    # 固定的其他参数
+    # 固定的其他参数（保留，若未来需要再用）
     mu_c = 0.0
-    sigma_c = 2.0 * np.sqrt(3.0) / 27.0
-    rho_d = 1.0  # 保持与你原始脚本一致
+    sigma_c = 2.0 * np.sqrt(3.0) / 9.0
+    rho_d = 0.0  # 保持与你原始脚本一致
 
     # 构造任务参数列表：按行 (mu_e) 优先，再列 (mu_d)，便于 reshape 回网格
     tasks = []
@@ -121,15 +130,8 @@ def compute_grid(s,
         for mu_d in mu_d_vals:
             tasks.append((s, phi_0, c_high, mu_d, sigma_d_fixed, rho_d, mu_e, sigma_e_fixed, t_steps, repeats))
 
-    def worker_task(params):
-        s_local, phi_0_local, c_high_local, mu_d_local, sigma_d_local, rho_d_local, mu_e_local, sigma_e_local, t_steps_local, repeats_local = params
-        vals = []
-        for _ in range(repeats_local):
-            vals.append(single_simulation_once(s_local, phi_0_local, c_high_local, mu_d_local, sigma_d_local, rho_d_local, mu_e_local, sigma_e_local, t_steps_local))
-        return float(np.mean(vals))
-
     if use_parallel:
-        # 尝试并行计算
+        # 并行计算：使用模块级 worker_task，可被 pickle
         with Pool(processes=n_workers) as pool:
             results = pool.map(worker_task, tasks)
     else:
@@ -148,7 +150,7 @@ def plot_heatmap(mu_d_vals, mu_e_vals, grid, phi_0, sigma_fixed, out_png="phase_
     fig, ax = plt.subplots(figsize=(8,6))
     im = ax.imshow(grid, origin='lower', aspect='auto',
                    extent=[mu_d_vals[0], mu_d_vals[-1], mu_e_vals[0], mu_e_vals[-1]],
-                   cmap=cmap, vmin=0.0, vmax=1.0)
+                   cmap=cmap)
     ax.set_xlabel("mu_d")
     ax.set_ylabel("mu_e")
     ax.set_title(f"Survival rate (s=?, phi_0={phi_0}, sigma_d=sigma_e={sigma_fixed})")
@@ -178,14 +180,16 @@ def save_grid_csv(mu_d_vals, mu_e_vals, grid, out_csv="phase_mu_d_mu_e.csv"):
 
 def parse_args():
     p = argparse.ArgumentParser(description="Compute phase diagram (survival rate) over mu_d x mu_e for fixed s, phi_0 and sigma_d=sigma_e=0.5.")
-    p.add_argument("--s", type=int, default=50, help="system size (default 30)")
+    p.add_argument("--s", type=int, default=100, help="system size (default 50)")
     p.add_argument("--phi_0", type=float, default=0.3, help="initial fraction set to c_high (default 0.3)")
     p.add_argument("--nx", type=int, default=100, help="number of mu_d points (default 100)")
     p.add_argument("--ny", type=int, default=100, help="number of mu_e points (default 100)")
     p.add_argument("--t_steps", type=int, default=2000, help="number of integration steps (default 2000)")
-    p.add_argument("--repeats", type=int, default=20, help="repeats per grid point to average (default 1)")
-    p.add_argument("--parallel", action="store_true", help="enable multiprocessing")
-    p.add_argument("--workers", type=int, default=None, help="number of workers for multiprocessing (default cpu_count())")
+    p.add_argument("--repeats", type=int, default=1, help="repeats per grid point to average (default 1)")
+    p.add_argument("--parallel", dest="parallel", action="store_true", help="enable multiprocessing")
+    p.add_argument("--no-parallel", dest="parallel", action="store_false", help="disable multiprocessing")
+    p.set_defaults(parallel=True)
+    p.add_argument("--workers", type=int, default=None, help="number of workers for multiprocessing (default cpu_count()-1)")
     p.add_argument("--out_dir", type=str, default="output_phase_mu", help="output directory (PNG + CSV) (default 'output_phase_mu')")
     p.add_argument("--quick", action="store_true", help="quick mode: reduce nx, ny, t_steps for fast test")
     return p.parse_args()
