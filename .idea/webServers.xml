@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="a4420b67-4738-4fef-bdd5-b32037b8fd1b" name="remote">
+        <fileTransfer rootFolder="/public/home/jxlan" accessType="SFTP" host="222.204.241.117" port="50022" sshConfigId="f1da3402-97b6-4ccf-a886-ab4121647029" sshConfig="jxlan@222.204.241.117:50022 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
