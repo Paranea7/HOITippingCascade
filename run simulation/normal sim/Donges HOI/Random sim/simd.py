@@ -102,8 +102,8 @@ def main():
     rho_d = 1.0
 
     s_values = [50]
-    mu_e_values = [0.8]
-    sigma_e_values = [0.1,0.2,0.3,0.5,0.7,1.0]
+    mu_e_values = [0.0]
+    sigma_e_values = [0.0]
 
     mu_d_values = [0.1,0.2, 0.3, 0.4,0.5,0.6,0.7,0.8,0.9,1.0]
     sigma_d_values = np.linspace(0.0, 1.0, 21)

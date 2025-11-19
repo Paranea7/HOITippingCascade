@@ -127,7 +127,7 @@ def run_one_parameter_combo(s, mu_e, sigma_e_values,
       但调用者将以 mu_e 为曲线分组保存为单个 CSV/PNG，所以这里返回列表形式。
     """
     if n_workers is None:
-        n_workers = max(1, cpu_count() - 1)
+        n_workers = max(1, cpu_count())
 
     means = []
     ses = []
@@ -162,7 +162,7 @@ def main():
     simulations_per_sigma = 200
 
     # 并行 worker 数，默认使用 cpu_count()-1 避免占满所有核心
-    n_workers = max(1, cpu_count() - 1)
+    n_workers = max(1, cpu_count())
 
     out_plot_dir = "outputplot_3body"
     out_csv_dir = "outputcsv_3body"
