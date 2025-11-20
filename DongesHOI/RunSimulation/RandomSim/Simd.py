@@ -27,20 +27,25 @@ def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
 def dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps):
     x = x_init.copy()
     dt = 0.01
+    XMAX = 50.0
+
+    def safe(x):
+        return np.clip(x, -XMAX, XMAX)
+
+    def f(xl):
+        xl = safe(xl)
+        dx = -xl**3 + xl + c_i
+        dx = dx + d_ji @ xl
+        dx = dx + np.einsum('ijk,j,k->i', e_ijk, xl, xl)
+        return safe(dx)
 
     for _ in range(t_steps):
-
-        def f(xl):
-            dx = -xl**3 + xl + c_i
-            dx = dx + d_ji @ xl
-            dx = dx + np.einsum('ijk,j,k->i', e_ijk, xl, xl)
-            return dx
-
         k1 = f(x)
         k2 = f(x + 0.5 * dt * k1)
         k3 = f(x + 0.5 * dt * k2)
         k4 = f(x + dt * k3)
         x += (k1 + 2*k2 + 2*k3 + k4) * dt / 6.
+        x = safe(x)
 
     return x
 
@@ -122,7 +127,7 @@ def main():
     rho_d = 0.0
 
     s_values = [30, 50]
-    mu_e_values = [0.0,0.1,0.3,0.5,1.0]
+    mu_e_values = [0.5,1.0]
     sigma_e_values = [0.0,0.1,0.3,0.5,1.0]
 
     mu_d_values = [0.0,0.1,0.3,0.5,1.0]
