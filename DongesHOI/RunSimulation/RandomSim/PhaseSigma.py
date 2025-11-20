@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+import os
+import csv
+import argparse
+from multiprocessing import Pool, cpu_count
+import numpy as np
+import matplotlib.pyplot as plt
+from numba import njit
+
+# ===================== numba 加速核心 =====================
+
+@njit
+def compute_dx_numba(x, c_i, d_ji, e_ijk):
+    s = x.shape[0]
+    dx = -x * x * x + x + c_i
+    dx += d_ji @ x
+
+    # 手写 triple-loop 代替 einsum
+    out = np.zeros(s)
+    for i in range(s):
+        acc = 0.0
+        for j in range(s):
+            xj = x[j]
+            for k in range(s):
+                acc += e_ijk[i, j, k] * xj * x[k]
+        out[i] = acc
+
+    dx += out
+    return dx
+
+
+@njit
+def dynamics_simulation_numba(s, c_i, d_ji, e_ijk, x_init, t_steps):
+    x = x_init.copy()
+    dt = 0.01
+    for _ in range(t_steps):
+        k1 = compute_dx_numba(x, c_i, d_ji, e_ijk)
+        k2 = compute_dx_numba(x + 0.5 * dt * k1, c_i, d_ji, e_ijk)
+        k3 = compute_dx_numba(x + 0.5 * dt * k2, c_i, d_ji, e_ijk)
+        k4 = compute_dx_numba(x + dt * k3, c_i, d_ji, e_ijk)
+        x += (k1 + 2*k2 + 2*k3 + k4) * dt / 6.0
+    return x
+
+# ===================== 原始 Python 函数（未改接口） =====================
+
+def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
+    c_i = np.random.normal(mu_c, sigma_c, s)
+    d_ij = np.random.normal(mu_d / s, sigma_d / s, (s, s))
+    d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * np.random.normal(mu_d / s, sigma_d / s, (s, s))
+    e_ijk = np.random.normal(mu_e / s**2, sigma_e / s**2, (s, s, s))
+    return c_i, d_ij, d_ji, e_ijk
+
+def dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps):
+    return dynamics_simulation_numba(s, c_i, d_ji, e_ijk, x_init, t_steps)
+
+def calculate_survival_rate(final_states):
+    survival = np.sum(final_states > 0)
+    return float(survival) / float(len(final_states))
+
+def single_simulation_once(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps, x0=0.6):
+    c_i, _, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
+    x_init = np.full(s, x0, float)
+    final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)
+    return calculate_survival_rate(final_states)
+
+# ===================== 网格计算与并行 =====================
+
+def compute_grid(s,
+                 mu_e,
+                 mu_d,
+                 sigma_d_vals,
+                 sigma_e_vals,
+                 t_steps=3000,
+                 repeats=50,
+                 use_parallel=True,
+                 n_workers=None):
+
+    if n_workers is None:
+        n_workers = max(1, cpu_count() - 1)
+
+    mu_c = 0.0
+    sigma_c = 2.0 * np.sqrt(3) / 9
+    rho_d = 0.0
+
+    tasks = []
+    for sigma_e in sigma_e_vals:
+        for sigma_d in sigma_d_vals:
+            tasks.append((s, mu_c, sigma_c, mu_d,
+                          float(sigma_d), rho_d, mu_e,
+                          float(sigma_e), t_steps, repeats))
+
+    def worker_task(params):
+        s_local, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps, reps = params
+        vals = []
+        for _ in range(reps):
+            vals.append(single_simulation_once(s_local, mu_c, sigma_c,
+                                               mu_d, sigma_d, rho_d,
+                                               mu_e, sigma_e, t_steps))
+        return float(np.mean(vals))
+
+    if use_parallel:
+        with Pool(processes=n_workers) as pool:
+            results = pool.map(worker_task, tasks)
+    else:
+        results = [worker_task(p) for p in tasks]
+
+    grid = np.array(results).reshape(len(sigma_e_vals), len(sigma_d_vals))
+    return sigma_d_vals, sigma_e_vals, grid
+
+# ===================== 输出 PNG + CSV =====================
+
+def plot_heatmap(sigma_d_vals, sigma_e_vals, grid,
+                 out_png="phase_sigma_d_sigma_e.png",
+                 cmap='viridis'):
+    fig, ax = plt.subplots(figsize=(8,6))
+    im = ax.imshow(grid,
+                   origin='lower',
+                   aspect='auto',
+                   extent=[sigma_d_vals[0], sigma_d_vals[-1],
+                           sigma_e_vals[0], sigma_e_vals[-1]],
+                   cmap=cmap,
+                   vmin=0.0, vmax=1.0)
+    ax.set_xlabel("sigma_d")
+    ax.set_ylabel("sigma_e")
+    ax.set_title("Survival rate (s=30)")
+    fig.colorbar(im, ax=ax).set_label("Survival rate")
+    fig.tight_layout()
+    fig.savefig(out_png, dpi=150)
+    plt.close(fig)
+    return out_png
+
+def save_grid_csv(sigma_d_vals, sigma_e_vals, grid,
+                  out_csv="phase_sigma_d_sigma_e.csv"):
+    with open(out_csv, 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(["sigma_e\\sigma_d"] + [f"{v:.6g}" for v in sigma_d_vals])
+        for j, sigma_e in enumerate(sigma_e_vals):
+            row = [f"{sigma_e:.6g}"] + [f"{v:.6g}" for v in grid[j, :]]
+            w.writerow(row)
+    return out_csv
+
+# ===================== 命令行接口 =====================
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--s", type=int, default=50)
+    p.add_argument("--mu_e", type=float, default=0.1)
+    p.add_argument("--mu_d", type=float, default=0.1)
+    p.add_argument("--nx", type=int, default=80)
+    p.add_argument("--ny", type=int, default=80)
+    p.add_argument("--t_steps", type=int, default=2400)
+    p.add_argument("--repeats", type=int, default=5)
+    p.add_argument("--parallel", action="store_true")
+    p.add_argument("--workers", type=int, default=None)
+    p.add_argument("--out_dir", type=str, default="output_phase")
+    p.add_argument("--quick", action="store_true")
+    return p.parse_args()
+
+def ensure_dir(d):
+    os.makedirs(d, exist_ok=True)
+    return d
+
+def main():
+    args = parse_args()
+
+    if args.quick:
+        args.nx = min(args.nx, 40)
+        args.ny = min(args.ny, 40)
+        args.t_steps = max(200, args.t_steps // 10)
+        print("Quick mode enabled.")
+
+    sigma_d_vals = np.linspace(0, 1, args.nx)
+    sigma_e_vals = np.linspace(0, 1, args.ny)
+
+    out_dir = ensure_dir(args.out_dir)
+    out_png = os.path.join(out_dir, "phase.png")
+    out_csv = os.path.join(out_dir, "phase.csv")
+
+    print("Starting compute grid...")
+
+    sigma_d_vals, sigma_e_vals, grid = compute_grid(
+        s=args.s,
+        mu_e=args.mu_e,
+        mu_d=args.mu_d,
+        sigma_d_vals=sigma_d_vals,
+        sigma_e_vals=sigma_e_vals,
+        t_steps=args.t_steps,
+        repeats=args.repeats,
+        use_parallel=args.parallel,
+        n_workers=args.workers
+    )
+
+    print("Saving results...")
+    plot_heatmap(sigma_d_vals, sigma_e_vals, grid, out_png)
+    save_grid_csv(sigma_d_vals, sigma_e_vals, grid, out_csv)
+
+    print("Done. Files saved to", out_dir)
+
+if __name__ == "__main__":
+    main()

@@ -74,8 +74,8 @@ def run_parallel(batch, s, t_steps, dt, mu_d, sigma_d, mu_e, sigma_e, n_jobs=4):
 ############################################
 
 if __name__ == "__main__":
-    s = 50
-    t_steps = 2000
+    s = 60
+    t_steps = 2200
     dt = 0.01
 
     mu_d = 0.4

@@ -26,8 +26,8 @@ import matplotlib.pyplot as plt
 # ========================
 # 🚀 默认配置（无需命令行输入）
 # ========================
-CSV_DIR_DEFAULT = "outputcsvd0"
-OUT_DIR_DEFAULT = "compare_plotsrho0"
+CSV_DIR_DEFAULT = "csv_output"
+OUT_DIR_DEFAULT = "compare_plotsrandom0"
 FNAME_RE = re.compile(r"s_(?P<s>\d+)_mue_(?P<mu_e>[\d\.]+)_sigmae_(?P<sigma_e>[\d\.]+)\.csv")
 
 # 图像设置
