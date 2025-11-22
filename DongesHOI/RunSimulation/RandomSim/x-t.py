@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 def generate_parameters(s, mu_d, sigma_d, mu_e, sigma_e):
     d = np.random.normal(mu_d / s, sigma_d / np.sqrt(s), (s, s))
     np.fill_diagonal(d, 0)
-    e = np.random.normal(mu_e / s, sigma_e / s**1.5, (s, s, s))
+    e = np.random.normal(mu_e / s, sigma_e / s**2, (s, s, s))
     for i in range(s):
         e[i, i, i] = 0
     return d, e

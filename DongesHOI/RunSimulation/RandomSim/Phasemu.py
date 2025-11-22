@@ -14,12 +14,12 @@ def generate_parameters(s,
     c_i = np.random.normal(mu_c, sigma_c, s)
 
     mean_d = mu_d / s
-    d_ij = np.random.normal(mean_d, sigma_d, (s, s))
-    eps = np.random.normal(mean_d, sigma_d, (s, s))
+    d_ij = np.random.normal(mean_d/s, sigma_d/np.sqrt(s), (s, s))
+    eps = np.random.normal(mean_d/s, sigma_d/np.sqrt(s), (s, s))
     d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * eps
 
     mean_e = mu_e / (s * s)
-    e_ijk = np.random.normal(mean_e, sigma_e, (s, s, s))
+    e_ijk = np.random.normal(mean_e, sigma_e/s, (s, s, s))
 
     return c_i, d_ij, d_ji, e_ijk
 
@@ -125,16 +125,16 @@ def save_csv(mu_d, mu_e, grid, out_csv):
 # -------------------- 主程序（无需命令行） --------------------
 def main():
 
-    nx = 80
-    ny = 80
-    mu_d_min = 0
-    mu_d_max = 1
-    mu_e_min = 0
-    mu_e_max = 1
-    s = 30
-    sigma_d = 0.3
-    sigma_e = 0.1
-    t_steps = 2000
+    nx = 100
+    ny = 100
+    mu_d_min = -0.5
+    mu_d_max = 0.5
+    mu_e_min = -0.5
+    mu_e_max = 0.5
+    s = 50
+    sigma_d = 0.5
+    sigma_e = 0.5
+    t_steps = 2400
     repeats = 1
     workers = None
     out = "out_mu_d_mu_e"
