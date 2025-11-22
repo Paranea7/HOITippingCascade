@@ -5,7 +5,9 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 import matplotlib.pyplot as plt
 
-
+# 全局参数
+mu_c = 0.0
+sigma_c = 2.0 * np.sqrt(3.0) / 27.0
 # -------------------- 参数生成 --------------------
 def generate_parameters(s,
                         mu_c, sigma_c,
@@ -79,8 +81,6 @@ def compute_grid(mu_d_vals, mu_e_vals,
                  t_steps, repeats,
                  workers=None):
 
-    mu_c = 0.0
-    sigma_c = 2.0 * np.sqrt(3.0) / 9.0
     rho_d = 0.0
 
     tasks = []
@@ -132,8 +132,8 @@ def main():
     mu_e_min = -0.5
     mu_e_max = 0.5
     s = 50
-    sigma_d = 0.5
-    sigma_e = 0.5
+    sigma_d = 0.6
+    sigma_e = 0.2
     t_steps = 2400
     repeats = 1
     workers = None
@@ -154,8 +154,8 @@ def main():
                         repeats=repeats,
                         workers=workers)
 
-    png = os.path.join(out, "phase.png")
-    csvf = os.path.join(out, "phase.csv")
+    png = os.path.join(out, f"s_{s}_mu_c_{mu_c}_sigma_c_{sigma_c}_sigma_d_{sigma_d}_sigma_e_{sigma_e}_phase.png")
+    csvf = os.path.join(out, f"s_{s}_mu_c_{mu_c}_sigma_c_{sigma_c}_sigma_d_{sigma_d}_sigma_e_{sigma_e}_phase.csv")
 
     print("Saving output...")
     plot_heatmap(mu_d_vals, mu_e_vals, grid, png)

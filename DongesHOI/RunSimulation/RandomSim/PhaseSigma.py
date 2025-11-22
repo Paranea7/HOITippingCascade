@@ -39,7 +39,7 @@ def dynamics_simulation_numba(s, c_i, d_ji, e_ijk, x_init, t_steps):
         x += (k1 + 2*k2 + 2*k3 + k4) * dt / 6.0
     return x
 
-# ===================== 原始 Python 函数 =====================
+# ===================== Python 逻辑 =====================
 
 def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     c_i = np.random.normal(mu_c, sigma_c, s)
@@ -64,7 +64,7 @@ def single_simulation_once(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e
     final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)
     return calculate_survival_rate(final_states)
 
-# ===================== 顶层 worker_task（可 pickle） =====================
+# ===================== worker （可 pickle） =====================
 
 def worker_task(params):
     s_local, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps, reps = params
@@ -79,7 +79,7 @@ def worker_task(params):
         )
     return float(np.mean(vals))
 
-# ===================== 网格计算（默认并行） =====================
+# ===================== 网格计算 =====================
 
 def compute_grid(
     s,
@@ -89,22 +89,26 @@ def compute_grid(
     sigma_e_vals,
     t_steps=3000,
     repeats=10,
-    n_workers=None
+    n_workers=None,
+    mu_c=0.0,
+    sigma_c=1.0
 ):
 
     if n_workers is None:
-        n_workers = max(1, cpu_count() - 1)
+        n_workers = max(1, cpu_count())
 
-    mu_c = 0.0
-    sigma_c = 2.0 * np.sqrt(3) / 27
     rho_d = 0.0
 
     tasks = []
     for sigma_e in sigma_e_vals:
         for sigma_d in sigma_d_vals:
-            tasks.append((s, mu_c, sigma_c, mu_d,
-                          float(sigma_d), rho_d, mu_e,
-                          float(sigma_e), t_steps, repeats))
+            tasks.append(
+                (
+                    s, mu_c, sigma_c, mu_d,
+                    float(sigma_d), rho_d, mu_e,
+                    float(sigma_e), t_steps, repeats
+                )
+            )
 
     with Pool(processes=n_workers) as pool:
         results = pool.map(worker_task, tasks)
@@ -112,7 +116,7 @@ def compute_grid(
     grid = np.array(results).reshape(len(sigma_e_vals), len(sigma_d_vals))
     return sigma_d_vals, sigma_e_vals, grid
 
-# ===================== 绘图 & CSV =====================
+# ===================== 绘图与保存 =====================
 
 def plot_heatmap(sigma_d_vals, sigma_e_vals, grid,
                  out_png="phase_sigma_d_sigma_e.png",
@@ -147,11 +151,10 @@ def save_grid_csv(sigma_d_vals, sigma_e_vals, grid,
             w.writerow(row)
     return out_csv
 
-# ===================== 主入口（默认自动运行） =====================
+# ===================== 主入口 =====================
 
 def main():
 
-    # ===== 默认参数，可自行修改 =====
     s = 50
     mu_e = 0
     mu_d = 0
@@ -159,10 +162,12 @@ def main():
     ny = 100
     t_steps = 3000
     repeats = 5
-    n_workers = None  # 自动 CPU-1
-    out_dir = "output_phase"
+    n_workers = None
+    out_dir = "output_phase_Sigma"
 
-    # 创建输出目录
+    mu_c = 0.0
+    sigma_c = 2.0 * np.sqrt(3) / 9.0
+
     os.makedirs(out_dir, exist_ok=True)
 
     sigma_d_vals = np.linspace(0, 1, nx)
@@ -178,11 +183,19 @@ def main():
         sigma_e_vals=sigma_e_vals,
         t_steps=t_steps,
         repeats=repeats,
-        n_workers=n_workers
+        n_workers=n_workers,
+        mu_c=mu_c,
+        sigma_c=sigma_c
     )
 
-    out_png = os.path.join(out_dir, "phase.png")
-    out_csv = os.path.join(out_dir, "phase.csv")
+    out_png = os.path.join(
+        out_dir,
+        f"s_{s}_muc{mu_c}_sigmac{sigma_c}_mud{mu_d}_mue{mu_e}_phase.png"
+    )
+    out_csv = os.path.join(
+        out_dir,
+        f"s_{s}_muc{mu_c}_sigmac{sigma_c}_mud{mu_d}_mue{mu_e}_phase.csv"
+    )
 
     print("Saving results...")
     plot_heatmap(sigma_d_vals, sigma_e_vals, grid, out_png)
