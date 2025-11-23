@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # -------------------- 全局参数（c 的新规则） --------------------
-phi0 = 0.05     # c = 0.4 的比例
+phi0 = 0.1     # c = 0.4 的比例
 c_high = 0.4    # phi0 对应的 c
 c_low = 0.0     # 其他节点的 c
 

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 # 固定比例 c_i
 ############################################
 
-phi0 = 0.1     # 5% 的节点拥有 c = 0.4
+phi0 = 0.1    # 5% 的节点拥有 c = 0.4
 c_high = 0.4
 c_low = 0.0
 
@@ -102,9 +102,9 @@ if __name__ == "__main__":
     t_steps = 2200
     dt = 0.01
 
-    mu_d = 0.4
+    mu_d = -0.2
     sigma_d = 0.3
-    mu_e = 0.3
+    mu_e = 0.1
     sigma_e = 0.1
 
     print("Generating parameters...")
