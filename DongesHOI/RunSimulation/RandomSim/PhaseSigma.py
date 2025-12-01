@@ -44,7 +44,7 @@ def dynamics_simulation_numba(s, c_i, d_ji, e_ijk, x_init, t_steps):
 def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     c_i = np.random.normal(mu_c, sigma_c, s)
     d_ij = np.random.normal(mu_d / s, sigma_d / np.sqrt(s), (s, s))
-    d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * np.random.normal(mu_d / s, sigma_d / s, (s, s))
+    d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * np.random.normal(mu_d / s, sigma_d /np.sqrt(s), (s, s))
     e_ijk = np.random.normal(mu_e / s**2, sigma_e / s, (s, s, s))
     return c_i, d_ij, d_ji, e_ijk
 
@@ -156,17 +156,17 @@ def save_grid_csv(sigma_d_vals, sigma_e_vals, grid,
 def main():
 
     s = 50
-    mu_e = 0
-    mu_d = 0
+    mu_e = 0.1
+    mu_d = 0.5
     nx = 100
     ny = 100
     t_steps = 3000
-    repeats = 5
+    repeats = 3
     n_workers = None
     out_dir = "output_phase_Sigma"
 
     mu_c = 0.0
-    sigma_c = 2.0 * np.sqrt(3) / 9.0
+    sigma_c = 2.0 * np.sqrt(3) / 27.0
 
     os.makedirs(out_dir, exist_ok=True)
 

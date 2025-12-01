@@ -123,44 +123,44 @@ def build_lookup(parsed_files):
     return lookup, sorted(s_set), sorted(mu_e_set), sorted(sigma_e_set)
 
 def generate_all_comparisons():
-    """
-    核心函数：生成三类单变量变化的对比图（PDF 格式）
-    """
     csv_dir = CSV_DIR_DEFAULT
     out_dir = OUT_DIR_DEFAULT
 
-    # 创建输出目录
+    # 主输出目录
     os.makedirs(out_dir, exist_ok=True)
+
+    # 创建三个子目录
+    out_dir_s = os.path.join(out_dir, "compare_s")
+    out_dir_mu_e = os.path.join(out_dir, "compare_mu_e")
+    out_dir_sigma_e = os.path.join(out_dir, "compare_sigma_e")
+    os.makedirs(out_dir_s, exist_ok=True)
+    os.makedirs(out_dir_mu_e, exist_ok=True)
+    os.makedirs(out_dir_sigma_e, exist_ok=True)
 
     print(f"🔍 开始读取 CSV 文件：{csv_dir}")
     parsed = find_csv_files(csv_dir)
     if not parsed:
-        print("❌ 未找到任何匹配的 CSV 文件。请检查文件命名格式或目录。")
+        print("❌ 未找到任何匹配的 CSV 文件。")
         return []
 
     lookup, s_all, mu_e_all, sigma_e_all = build_lookup(parsed)
-    print(f"✅ 找到文件，s in {s_all}, mu_e in {mu_e_all}, sigma_e in {sigma_e_all}")
+    print(f"✅ 参数空间：s={s_all}, mu_e={mu_e_all}, sigma_e={sigma_e_all}")
 
-    # 缓存数据（避免重复读取）
+    # 缓存数据
     cache = {}
     for key, path in lookup.items():
-        try:
-            sigma_d_vals, data = load_csv_data(path)
-        except Exception as e:
-            print(f"❌ 读取失败: {path} -> {e}")
-            continue
+        sigma_d_vals, data = load_csv_data(path)
         cache[key] = (sigma_d_vals, data)
 
-    # 获取所有 mu_d 值（统一）
     any_key = next(iter(cache))
     sigma_d_master, data_master = cache[any_key]
     mu_d_values = sorted(list(data_master.keys()))
-    print("✅ 检测到 mu_d 值:", mu_d_values)
+    print("✅ mu_d 值:", mu_d_values)
 
     generated = []
 
     # ========================
-    # 1️⃣ 比较不同 s（固定 mu_e, sigma_e）
+    # 1️⃣ 比较不同 s
     # ========================
     for mu_e in mu_e_all:
         for sigma_e in sigma_e_all:
@@ -169,8 +169,7 @@ def generate_all_comparisons():
                 x_vals = None
                 for s in s_all:
                     key = (s, mu_e, sigma_e)
-                    path = lookup.get(key)
-                    if path is None:
+                    if key not in cache:
                         continue
                     sigma_d_vals, data = cache[key]
                     x_vals = sigma_d_vals
@@ -178,22 +177,19 @@ def generate_all_comparisons():
                     series.append((f"s={s}", means, ses if SHOW_SE else None))
                 if not series:
                     continue
+
                 outname = f"compare_s_mu_e_{mu_e}_sigmae_{sigma_e}_mu_d_{mu_d}.pdf"
-                outpath = os.path.join(out_dir, outname)
+                outpath = os.path.join(out_dir_s, outname)
+
                 if not OVERWRITE and os.path.exists(outpath):
-                    print("📄 已存在，跳过：", outpath)
                     generated.append(outpath)
                 else:
                     title = f"Varying s | mu_e={mu_e}, sigma_e={sigma_e}, mu_d={mu_d}"
-                    plot_series_with_error(
-                        x_vals, series, xlabel="sigma_d", title=title,
-                        outpath=outpath, show_se=SHOW_SE, fill_se=FILL_SE
-                    )
-                    print("✅ 保存：", outpath)
+                    plot_series_with_error(x_vals, series, "sigma_d", title, outpath)
                     generated.append(outpath)
 
     # ========================
-    # 2️⃣ 比较不同 mu_e（固定 s, sigma_e）
+    # 2️⃣ 比较不同 mu_e
     # ========================
     for s in s_all:
         for sigma_e in sigma_e_all:
@@ -202,8 +198,7 @@ def generate_all_comparisons():
                 x_vals = None
                 for mu_e in mu_e_all:
                     key = (s, mu_e, sigma_e)
-                    path = lookup.get(key)
-                    if path is None:
+                    if key not in cache:
                         continue
                     sigma_d_vals, data = cache[key]
                     x_vals = sigma_d_vals
@@ -211,22 +206,19 @@ def generate_all_comparisons():
                     series.append((f"mu_e={mu_e}", means, ses if SHOW_SE else None))
                 if not series:
                     continue
+
                 outname = f"compare_mu_e_s_{s}_sigmae_{sigma_e}_mu_d_{mu_d}.pdf"
-                outpath = os.path.join(out_dir, outname)
+                outpath = os.path.join(out_dir_mu_e, outname)
+
                 if not OVERWRITE and os.path.exists(outpath):
-                    print("📄 已存在，跳过：", outpath)
                     generated.append(outpath)
                 else:
                     title = f"Varying mu_e | s={s}, sigma_e={sigma_e}, mu_d={mu_d}"
-                    plot_series_with_error(
-                        x_vals, series, xlabel="sigma_d", title=title,
-                        outpath=outpath, show_se=SHOW_SE, fill_se=FILL_SE
-                    )
-                    print("✅ 保存：", outpath)
+                    plot_series_with_error(x_vals, series, "sigma_d", title, outpath)
                     generated.append(outpath)
 
     # ========================
-    # 3️⃣ 比较不同 sigma_e（固定 s, mu_e）
+    # 3️⃣ 比较不同 sigma_e
     # ========================
     for s in s_all:
         for mu_e in mu_e_all:
@@ -235,8 +227,7 @@ def generate_all_comparisons():
                 x_vals = None
                 for sigma_e in sigma_e_all:
                     key = (s, mu_e, sigma_e)
-                    path = lookup.get(key)
-                    if path is None:
+                    if key not in cache:
                         continue
                     sigma_d_vals, data = cache[key]
                     x_vals = sigma_d_vals
@@ -244,21 +235,18 @@ def generate_all_comparisons():
                     series.append((f"sigma_e={sigma_e}", means, ses if SHOW_SE else None))
                 if not series:
                     continue
+
                 outname = f"compare_sigma_e_s_{s}_mue_{mu_e}_mu_d_{mu_d}.pdf"
-                outpath = os.path.join(out_dir, outname)
+                outpath = os.path.join(out_dir_sigma_e, outname)
+
                 if not OVERWRITE and os.path.exists(outpath):
-                    print("📄 已存在，跳过：", outpath)
                     generated.append(outpath)
                 else:
                     title = f"Varying sigma_e | s={s}, mu_e={mu_e}, mu_d={mu_d}"
-                    plot_series_with_error(
-                        x_vals, series, xlabel="sigma_d", title=title,
-                        outpath=outpath, show_se=SHOW_SE, fill_se=FILL_SE
-                    )
-                    print("✅ 保存：", outpath)
+                    plot_series_with_error(x_vals, series, "sigma_d", title, outpath)
                     generated.append(outpath)
 
-    print("🎉 所有图表生成完成！共生成:", len(generated))
+    print("🎉 输出完成，共生成:", len(generated))
     return generated
 
 # ========================

@@ -17,7 +17,7 @@ def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
 
     # three-body scaling
     mean_e = mu_e / s
-    std_e = sigma_e / (s**1.5)
+    std_e = sigma_e / (s**2)
     e_ijk = np.random.normal(mean_e, std_e, (s, s, s))
 
     return c_i, d_ij, d_ji, e_ijk

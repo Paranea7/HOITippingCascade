@@ -132,9 +132,9 @@ def main():
     mu_e_min = -0.5
     mu_e_max = 0.5
     s = 50
-    sigma_d = 0.2
+    sigma_d = 0.5
     sigma_e = 0.2
-    t_steps = 2400
+    t_steps = 3000
     repeats = 1
     workers = None
     out = "out_mu_d_mu_e"
