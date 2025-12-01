@@ -123,18 +123,18 @@ def run_one_combo(s, mu_e, sigma_e,
 # ---------------- main ----------------
 def main():
     mu_c = 0.0
-    sigma_c = 2*np.sqrt(3)/9
+    sigma_c = 2*np.sqrt(3)/27.0
     rho_d = 0.0
 
     s_values = [30, 50]
-    mu_e_values = [0.5,1.0]
+    mu_e_values = [0.0,0.1,0.2,0.5]
     sigma_e_values = [0.0,0.1,0.3,0.5,1.0]
 
-    mu_d_values = [0.0,0.1,0.3,0.5,1.0]
+    mu_d_values = [-0.5,-0.1,0.0,0.1,0.3,0.5]
     sigma_d_values = np.linspace(0, 1, 21)
 
-    t_steps = 2000
-    simulations_per_sigma = 50
+    t_steps = 2400
+    simulations_per_sigma = 100
 
     out_csv_dir = "csv_output"
     n_workers = max(1, cpu_count())
