@@ -58,7 +58,7 @@ def calculate_survival_rate(final_states):
     return float(survival) / float(len(final_states))
 
 
-def single_simulation_once(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps, x0=0.6):
+def single_simulation_once(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps, x0=-0.6):
     c_i, _, d_ji, e_ijk = generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e)
     x_init = np.full(s, x0, float)
     final_states = dynamics_simulation(s, c_i, d_ji, e_ijk, x_init, t_steps)
@@ -91,7 +91,7 @@ def compute_grid(
     repeats=10,
     n_workers=None,
     mu_c=0.0,
-    sigma_c=1.0
+    sigma_c=0.0
 ):
 
     if n_workers is None:
@@ -157,7 +157,7 @@ def main():
 
     s = 50
     mu_e = 0.1
-    mu_d = 0.5
+    mu_d = -0.3
     nx = 100
     ny = 100
     t_steps = 3000
@@ -166,7 +166,7 @@ def main():
     out_dir = "output_phase_Sigma"
 
     mu_c = 0.0
-    sigma_c = 2.0 * np.sqrt(3) / 27.0
+    sigma_c = 0.0
 
     os.makedirs(out_dir, exist_ok=True)
 
