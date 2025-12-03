@@ -23,8 +23,8 @@ def generate_parameters(s,
 
     # -------------------- d 生成 --------------------
     mean_d = mu_d / s
-    d_ij = np.random.normal(mean_d / s, sigma_d / np.sqrt(s), (s, s))
-    eps = np.random.normal(mean_d / s, sigma_d / np.sqrt(s), (s, s))
+    d_ij = np.random.normal(mean_d, sigma_d / np.sqrt(s), (s, s))
+    eps = np.random.normal(mean_d, sigma_d / np.sqrt(s), (s, s))
     d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d ** 2)) * eps
 
     # -------- 清零 d[ii] --------
