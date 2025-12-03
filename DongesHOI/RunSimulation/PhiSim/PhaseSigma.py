@@ -6,12 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numba import njit
 
-# ===================== 固定比例的 c_i =====================
 phi0 = 0.05
 c_high = 0.4
 c_low = 0.0
-
-# ===================== numba 加速核心 =====================
 
 @njit
 def compute_dx_numba(x, c_i, d_ji, e_ijk):
@@ -45,21 +42,32 @@ def dynamics_simulation_numba(s, c_i, d_ji, e_ijk, x_init, t_steps):
     return x
 
 
-# ===================== Python 逻辑 =====================
-
 def generate_parameters(s, mu_d, sigma_d, rho_d, mu_e, sigma_e):
-    # ----------- 固定比例生成 c_i --------------
+
     c_i = np.full(s, c_low)
     n_high = int(phi0 * s)
     idx = np.random.choice(s, n_high, replace=False)
     c_i[idx] = c_high
 
-    # ------------------ d 和 e 保留原逻辑 -------------------
     d_ij = np.random.normal(mu_d / s, sigma_d / np.sqrt(s), (s, s))
     d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * \
-           np.random.normal(mu_d / s, sigma_d / s, (s, s))
+           np.random.normal(mu_d / s, sigma_d / np.sqrt(s), (s, s))
+
+    # -------- 强制 d_ii = 0 --------
+    for i in range(s):
+        d_ij[i, i] = 0.0
+        d_ji[i, i] = 0.0
 
     e_ijk = np.random.normal(mu_e / s**2, sigma_e / s, (s, s, s))
+
+    # -------- 强制 e[i,i,i] = e[i,i,k] = e[i,j,i] = 0 --------
+    for i in range(s):
+        for j in range(s):
+            e_ijk[i, j, i] = 0.0
+        for k in range(s):
+            e_ijk[i, i, k] = 0.0
+    for i in range(s):
+        e_ijk[i, i, i] = 0.0
 
     return c_i, d_ij, d_ji, e_ijk
 
@@ -73,7 +81,7 @@ def calculate_survival_rate(final_states):
 
 
 def single_simulation_once(s, mu_d, sigma_d, rho_d, mu_e, sigma_e,
-                           t_steps, x0=0.6):
+                           t_steps, x0=-0.6):
 
     c_i, _, d_ji, e_ijk = generate_parameters(
         s, mu_d, sigma_d, rho_d, mu_e, sigma_e
@@ -84,8 +92,6 @@ def single_simulation_once(s, mu_d, sigma_d, rho_d, mu_e, sigma_e,
 
     return calculate_survival_rate(final_states)
 
-
-# ===================== worker =====================
 
 def worker_task(params):
     s_local, mu_d, sigma_d, rho_d, mu_e, sigma_e, t_steps, reps = params
@@ -99,8 +105,6 @@ def worker_task(params):
         )
     return float(np.mean(vals))
 
-
-# ===================== 网格计算 =====================
 
 def compute_grid(
     s,
@@ -136,8 +140,6 @@ def compute_grid(
     return sigma_d_vals, sigma_e_vals, grid
 
 
-# ===================== 输出 =====================
-
 def plot_heatmap(sigma_d_vals, sigma_e_vals, grid,
                  out_png="phase_sigma_d_sigma_e.png",
                  cmap='viridis'):
@@ -172,13 +174,11 @@ def save_grid_csv(sigma_d_vals, sigma_e_vals, grid,
     return out_csv
 
 
-# ===================== 主入口 =====================
-
 def main():
 
     s = 50
-    mu_e = 0
-    mu_d = 0
+    mu_e = 0.0
+    mu_d = 0.0
     nx = 100
     ny = 100
     t_steps = 3000

@@ -21,14 +21,33 @@ def generate_parameters(s,
     idx = np.random.choice(s, n_high, replace=False)
     c_i[idx] = c_high
 
-    # -------------------- d & e 保持原逻辑 --------------------
+    # -------------------- d 生成 --------------------
     mean_d = mu_d / s
     d_ij = np.random.normal(mean_d / s, sigma_d / np.sqrt(s), (s, s))
     eps = np.random.normal(mean_d / s, sigma_d / np.sqrt(s), (s, s))
     d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d ** 2)) * eps
 
+    # -------- 清零 d[ii] --------
+    np.fill_diagonal(d_ij, 0.0)
+    np.fill_diagonal(d_ji, 0.0)
+
+    # -------------------- e 生成 --------------------
     mean_e = mu_e / (s * s)
     e_ijk = np.random.normal(mean_e, sigma_e / s, (s, s, s))
+
+    # -------- 清零 e[i,i,i] --------
+    for i in range(s):
+        e_ijk[i, i, i] = 0.0
+
+    # -------- 清零 e[i,i,k] --------
+    for i in range(s):
+        for k in range(s):
+            e_ijk[i, i, k] = 0.0
+
+    # -------- 清零 e[i,j,i] --------
+    for i in range(s):
+        for j in range(s):
+            e_ijk[i, j, i] = 0.0
 
     return c_i, d_ij, d_ji, e_ijk
 
@@ -148,10 +167,10 @@ def main():
     mu_e_max = 0.5
 
     s = 50
-    sigma_d = 0.2
+    sigma_d = 0.3
     sigma_e = 0.2
 
-    t_steps = 2400
+    t_steps = 3000
     repeats = 1
     workers = None
 

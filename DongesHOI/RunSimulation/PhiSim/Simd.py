@@ -5,30 +5,50 @@ import numpy as np
 from multiprocessing import Pool, cpu_count
 
 # ---------------- 固定比例 c_i 设置 ----------------
-phi0 = 0.05    # 有 5% 的节点使用 c = 0.4
+phi0 = 0.05
 c_high = 0.4
 c_low = 0.0
 
-# ---------------- 参数生成（删除 mu_c, sigma_c） ----------------
+
+# ---------------- 参数生成（含 d[ii] 和 e 相关项清零） ----------------
 def generate_parameters(s, mu_d, sigma_d, rho_d, mu_e, sigma_e):
 
-    # ----------- 固定比例生成 c_i -----------
+    # 固定比例 c_i
     c_i = np.full(s, c_low)
     n_high = int(phi0 * s)
     idx = np.random.choice(s, n_high, replace=False)
     c_i[idx] = c_high
 
-    # two-body scaling
+    # -------- 二体耦合 --------
     mean_d = mu_d / s
     std_d = sigma_d / np.sqrt(s)
     d_ij = np.random.normal(mean_d, std_d, (s, s))
-    d_ji = rho_d * d_ij + np.sqrt(1 - rho_d**2) * \
+    d_ji = rho_d * d_ij + np.sqrt(max(0, 1 - rho_d**2)) * \
            np.random.normal(mean_d, std_d, (s, s))
 
-    # three-body scaling
+    # -------- 强制 d[ii] = 0 --------
+    np.fill_diagonal(d_ij, 0.0)
+    np.fill_diagonal(d_ji, 0.0)
+
+    # -------- 三体耦合生成 --------
     mean_e = mu_e / s
-    std_e = sigma_e / (s ** 1.5)
+    std_e = sigma_e / (s ** 2)
     e_ijk = np.random.normal(mean_e, std_e, (s, s, s))
+
+    # -------- 清零三体所有自耦合项 --------
+    # e[i,i,i] = 0
+    for i in range(s):
+        e_ijk[i, i, i] = 0.0
+
+    # e[i,i,k] = 0
+    for i in range(s):
+        for k in range(s):
+            e_ijk[i, i, k] = 0.0
+
+    # e[i,j,i] = 0
+    for i in range(s):
+        for j in range(s):
+            e_ijk[i, j, i] = 0.0
 
     return c_i, d_ij, d_ji, e_ijk
 
@@ -121,7 +141,6 @@ def run_one_combo(s, mu_e, sigma_e,
 
             mean_ = np.mean(results)
             se_ = np.std(results, ddof=1) / np.sqrt(len(results)) if len(results) > 1 else 0
-
             means.append(mean_)
             ses.append(se_)
 
@@ -140,16 +159,16 @@ def main():
     rho_d = 0.0
 
     s_values = [30, 50]
-    mu_e_values = [0.5, 1.0]
+    mu_e_values = [0.0, 0.1, 0.2, 0.5]
     sigma_e_values = [0.0, 0.1, 0.3, 0.5, 1.0]
 
-    mu_d_values = [0.0, 0.1, 0.3, 0.5, 1.0]
+    mu_d_values = [-0.5, -0.1, 0.0, 0.1, 0.3, 0.5]
     sigma_d_values = np.linspace(0, 1, 21)
 
-    t_steps = 2000
-    simulations_per_sigma = 50
+    t_steps = 3000
+    simulations_per_sigma = 100
 
-    out_csv_dir = "csv_output_fixed_c"
+    out_csv_dir = "csv_output_fixed_c_no_self"
     n_workers = max(1, cpu_count())
 
     total = len(s_values) * len(mu_e_values) * len(sigma_e_values)
