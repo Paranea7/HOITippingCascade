@@ -43,9 +43,35 @@ def dynamics_simulation_numba(s, c_i, d_ji, e_ijk, x_init, t_steps):
 
 def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     c_i = np.random.normal(mu_c, sigma_c, s)
-    d_ij = np.random.normal(mu_d / s, sigma_d / np.sqrt(s), (s, s))
-    d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * np.random.normal(mu_d / s, sigma_d /np.sqrt(s), (s, s))
-    e_ijk = np.random.normal(mu_e / s**2, sigma_e / s, (s, s, s))
+
+    # two-body scaling
+    mean_d = mu_d / s
+    std_d = sigma_d / np.sqrt(s)
+    d_ij = np.random.normal(mean_d, std_d, (s, s))
+    d_ji = rho_d * d_ij + np.sqrt(1 - rho_d ** 2) * \
+           np.random.normal(mean_d, std_d, (s, s))
+    # -------- 清零 d[ii] --------
+    np.fill_diagonal(d_ij, 0.0)
+    np.fill_diagonal(d_ji, 0.0)
+    # three-body scaling
+    mean_e = mu_e / (s ** 2)
+    std_e = sigma_e / s
+    e_ijk = np.random.normal(mean_e, std_e, (s, s, s))
+
+    # -------- 清零 e[i,i,i] --------
+    for i in range(s):
+        e_ijk[i, i, i] = 0.0
+
+    # -------- 清零 e[i,i,k] --------
+    for i in range(s):
+        for k in range(s):
+            e_ijk[i, i, k] = 0.0
+
+    # -------- 清零 e[i,j,i] --------
+    for i in range(s):
+        for j in range(s):
+            e_ijk[i, j, i] = 0.0
+
     return c_i, d_ij, d_ji, e_ijk
 
 
@@ -157,7 +183,7 @@ def main():
 
     s = 50
     mu_e = 0.1
-    mu_d = -0.3
+    mu_d = 0.3
     nx = 100
     ny = 100
     t_steps = 3000
@@ -166,7 +192,7 @@ def main():
     out_dir = "output_phase_Sigma"
 
     mu_c = 0.0
-    sigma_c = 0.0
+    sigma_c =2. * np.sqrt(3.)/27.
 
     os.makedirs(out_dir, exist_ok=True)
 
