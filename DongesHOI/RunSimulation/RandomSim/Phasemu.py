@@ -9,19 +9,36 @@ import matplotlib.pyplot as plt
 mu_c = 0.0
 sigma_c = 2.0 * np.sqrt(3.0) / 27.0
 # -------------------- 参数生成 --------------------
-def generate_parameters(s,
-                        mu_c, sigma_c,
-                        mu_d, sigma_d, rho_d,
-                        mu_e, sigma_e):
+def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     c_i = np.random.normal(mu_c, sigma_c, s)
 
+    # two-body scaling
     mean_d = mu_d / s
-    d_ij = np.random.normal(mean_d/s, sigma_d/np.sqrt(s), (s, s))
-    eps = np.random.normal(mean_d/s, sigma_d/np.sqrt(s), (s, s))
-    d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * eps
+    std_d = sigma_d / np.sqrt(s)
+    d_ij = np.random.normal(mean_d, std_d, (s, s))
+    d_ji = rho_d * d_ij + np.sqrt(1 - rho_d ** 2) * \
+           np.random.normal(mean_d, std_d, (s, s))
+    # -------- 清零 d[ii] --------
+    np.fill_diagonal(d_ij, 0.0)
+    np.fill_diagonal(d_ji, 0.0)
+    # three-body scaling
+    mean_e = mu_e / (s ** 2)
+    std_e = sigma_e / s
+    e_ijk = np.random.normal(mean_e, std_e, (s, s, s))
 
-    mean_e = mu_e / (s * s)
-    e_ijk = np.random.normal(mean_e, sigma_e/s, (s, s, s))
+    # -------- 清零 e[i,i,i] --------
+    for i in range(s):
+        e_ijk[i, i, i] = 0.0
+
+    # -------- 清零 e[i,i,k] --------
+    for i in range(s):
+        for k in range(s):
+            e_ijk[i, i, k] = 0.0
+
+    # -------- 清零 e[i,j,i] --------
+    for i in range(s):
+        for j in range(s):
+            e_ijk[i, j, i] = 0.0
 
     return c_i, d_ij, d_ji, e_ijk
 

@@ -14,11 +14,27 @@ def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     d_ij = np.random.normal(mean_d, std_d, (s, s))
     d_ji = rho_d * d_ij + np.sqrt(1 - rho_d**2) * \
            np.random.normal(mean_d, std_d, (s, s))
-
+    # -------- 清零 d[ii] --------
+    np.fill_diagonal(d_ij, 0.0)
+    np.fill_diagonal(d_ji, 0.0)
     # three-body scaling
-    mean_e = mu_e / s
-    std_e = sigma_e / (s**2)
+    mean_e = mu_e / (s**2)
+    std_e = sigma_e / s
     e_ijk = np.random.normal(mean_e, std_e, (s, s, s))
+
+    # -------- 清零 e[i,i,i] --------
+    for i in range(s):
+        e_ijk[i, i, i] = 0.0
+
+    # -------- 清零 e[i,i,k] --------
+    for i in range(s):
+        for k in range(s):
+            e_ijk[i, i, k] = 0.0
+
+    # -------- 清零 e[i,j,i] --------
+    for i in range(s):
+        for j in range(s):
+            e_ijk[i, j, i] = 0.0
 
     return c_i, d_ij, d_ji, e_ijk
 
