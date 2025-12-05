@@ -31,8 +31,8 @@ def generate_parameters(s, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     np.fill_diagonal(d_ji, 0.0)
 
     # -------- 三体耦合生成 --------
-    mean_e = mu_e / s
-    std_e = sigma_e / (s ** 2)
+    mean_e = mu_e / (s**2)
+    std_e = sigma_e / s
     e_ijk = np.random.normal(mean_e, std_e, (s, s, s))
 
     # -------- 清零三体所有自耦合项 --------
