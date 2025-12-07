@@ -261,9 +261,9 @@ if __name__ == "__main__":
         'S': 100,
         'dt': 0.01,
         't_steps': 3000,
-        'mu_c': 0.0, 'sigma_c': 0.2,
-        'mu_d': 0.3, 'sigma_d': 0.0,
-        'mu_e': 0.1, 'sigma_e': 0.0
+        'mu_c': 0.0, 'sigma_c': 0.12,
+        'mu_d': 0.2, 'sigma_d': 0.2,
+        'mu_e': 0.1, 'sigma_e': 0.2
     }
     num_batches = 30
 
