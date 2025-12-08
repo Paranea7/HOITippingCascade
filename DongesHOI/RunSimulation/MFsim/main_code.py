@@ -5,6 +5,16 @@ from joblib import Parallel, delayed
 import time
 from scipy.stats import gaussian_kde
 
+sim_params = {
+        'S': 50,
+        'dt': 0.01,
+        't_steps': 3000,
+        'mu_c': 0.0, 'sigma_c': 0.1283,
+        'mu_d': 0.3, 'sigma_d': 0.2,
+        'mu_e': 0.1, 'sigma_e': 0.2
+    }
+
+
 # ==========================================================
 # 1. 动力学部分
 # ==========================================================
@@ -309,15 +319,6 @@ def plot_phase_mu(mu_d_list, mu_e_list, sim_grid, th_grid):
 # ==========================================================
 
 if __name__ == "__main__":
-
-    sim_params = {
-        'S': 50,
-        'dt': 0.01,
-        't_steps': 2500,
-        'mu_c': 0.0, 'sigma_c': 0.12,
-        'mu_d': 0.2, 'sigma_d': 0.2,
-        'mu_e': 0.1, 'sigma_e': 0.2
-    }
 
     num_batches = 10
     initial_mean = -0.6
