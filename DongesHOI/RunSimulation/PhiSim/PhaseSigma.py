@@ -53,14 +53,12 @@ def generate_parameters(s, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     d_ji = rho_d * d_ij + np.sqrt(max(0.0, 1 - rho_d**2)) * \
            np.random.normal(mu_d / s, sigma_d / np.sqrt(s), (s, s))
 
-    # -------- 强制 d_ii = 0 --------
     for i in range(s):
         d_ij[i, i] = 0.0
         d_ji[i, i] = 0.0
 
     e_ijk = np.random.normal(mu_e / s**2, sigma_e / s, (s, s, s))
 
-    # -------- 强制 e[i,i,i] = e[i,i,k] = e[i,j,i] = 0 --------
     for i in range(s):
         for j in range(s):
             e_ijk[i, j, i] = 0.0
@@ -177,8 +175,8 @@ def save_grid_csv(sigma_d_vals, sigma_e_vals, grid,
 def main():
 
     s = 50
-    mu_e = 0.0
-    mu_d = 0.0
+    mu_e =-0.2
+    mu_d = 0.2
     nx = 100
     ny = 100
     t_steps = 3000
@@ -204,8 +202,10 @@ def main():
         n_workers=n_workers
     )
 
-    out_png = os.path.join(out_dir, f"s_{s}_phi0_{phi0}_c{c_high}_phase.png")
-    out_csv = os.path.join(out_dir, f"s_{s}_phi0_{phi0}_c{c_high}_phase.csv")
+    file_tag = f"s{s}_phi0{phi0}_c{c_high}_muD{mu_d}_muE{mu_e}_t{t_steps}_rep{repeats}_nx{nx}_ny{ny}"
+
+    out_png = os.path.join(out_dir, f"{file_tag}_phase.png")
+    out_csv = os.path.join(out_dir, f"{file_tag}_phase.csv")
 
     print("Saving results...")
     plot_heatmap(sigma_d_vals, sigma_e_vals, grid, out_png)

@@ -132,17 +132,22 @@ def compute_grid(mu_d_vals, mu_e_vals,
 
 # -------------------- 输出 --------------------
 def plot_heatmap(mu_d, mu_e, grid, out_png):
+    vmax = float(np.max(grid))
+
     fig, ax = plt.subplots(figsize=(7, 5))
-    im = ax.imshow(grid,
-                   origin='lower',
-                   aspect='auto',
-                   extent=[mu_d[0], mu_d[-1], mu_e[0], mu_e[-1]],
-                   cmap='viridis',
-                   vmin=0, vmax=1)
+    im = ax.imshow(
+        grid,
+        origin='lower',
+        aspect='auto',
+        extent=[mu_d[0], mu_d[-1], mu_e[0], mu_e[-1]],
+        cmap='viridis',
+        vmin=0,
+        vmax=vmax
+    )
     ax.set_xlabel("mu_d")
     ax.set_ylabel("mu_e")
     ax.set_title("Survival rate")
-    plt.colorbar(im, ax=ax, label="Survival rate")
+    plt.colorbar(im, ax=ax, label=f"Survival rate (max={vmax:.3f})")
     fig.tight_layout()
     fig.savefig(out_png, dpi=150)
     plt.close(fig)
@@ -167,11 +172,11 @@ def main():
     mu_e_max = 0.5
 
     s = 50
-    sigma_d = 0.3
-    sigma_e = 0.2
+    sigma_d = 0.5
+    sigma_e = 0.5
 
     t_steps = 3000
-    repeats = 1
+    repeats = 5
     workers = None
 
     out = "out_mu_d_mu_e"
@@ -192,9 +197,18 @@ def main():
         workers=workers
     )
 
-    png = os.path.join(out, f"s_{s}_phi0_{phi0}_c_high_{c_high}_phase.png")
-    csvf = os.path.join(out, f"s_{s}_phi0_{phi0}_c_high_{c_high}_phase.csv")
+    name = (
+        f"s_{s}"
+        f"_phi0_{phi0}"
+        f"_c_high_{c_high}"
+        f"_sigma_d_{sigma_d}"
+        f"_sigma_e_{sigma_e}"
+        f"_tsteps_{t_steps}"
+        f"_repeats_{repeats}"
+    )
 
+    png = os.path.join(out, name + ".png")
+    csvf = os.path.join(out, name + ".csv")
     print("Saving output...")
     plot_heatmap(mu_d_vals, mu_e_vals, grid, png)
     save_csv(mu_d_vals, mu_e_vals, grid, csvf)
