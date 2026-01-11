@@ -175,7 +175,7 @@ def save_grid_csv(sigma_d_vals, sigma_e_vals, grid,
 def main():
 
     s = 50
-    mu_e =-0.2
+    mu_e = 0.5
     mu_d = 0.2
     nx = 100
     ny = 100

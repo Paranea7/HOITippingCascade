@@ -7,13 +7,25 @@ import matplotlib.pyplot as plt
 # 参数生成
 ############################################
 
+import numpy as np
+
+
 def generate_parameters(s, mu_d, sigma_d, mu_e, sigma_e):
+    # 生成 d 矩阵
     d = np.random.normal(mu_d / s, sigma_d / np.sqrt(s), (s, s))
     np.fill_diagonal(d, 0)
-    e = np.random.normal(mu_e / s, sigma_e / s**2, (s, s, s))
+
+    # 生成 e 张量
+    e = np.random.normal(mu_e / s, sigma_e / s ** 2, (s, s, s))
+
     for i in range(s):
-        e[i, i, i] = 0
+        e[i, i, :] = 0  # 设置 e[i, i, k] = 0 (前两个索引相同)
+        e[i, :, i] = 0  # 设置 e[i, j, i] = 0 (首尾索引相同)
+        e[:, i, i] = 0  # 设置 e[k, i, i] = 0 (后两个索引相同)
+
     return d, e
+
+
 
 ############################################
 # numba ODE
@@ -75,7 +87,7 @@ def run_parallel(batch, s, t_steps, dt, mu_d, sigma_d, mu_e, sigma_e, n_jobs=4):
 
 if __name__ == "__main__":
     s = 60
-    t_steps = 5000
+    t_steps = 2500
     dt = 0.01
 
     mu_d = 0.4

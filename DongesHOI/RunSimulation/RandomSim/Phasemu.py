@@ -12,33 +12,30 @@ sigma_c = 2.0 * np.sqrt(3.0) / 27.0
 def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
     c_i = np.random.normal(mu_c, sigma_c, s)
 
-    # two-body scaling
+    # --- Two-body scaling ---
     mean_d = mu_d / s
     std_d = sigma_d / np.sqrt(s)
     d_ij = np.random.normal(mean_d, std_d, (s, s))
     d_ji = rho_d * d_ij + np.sqrt(1 - rho_d ** 2) * \
            np.random.normal(mean_d, std_d, (s, s))
-    # -------- 清零 d[ii] --------
+
+    # 优化：直接使用 fill_diagonal，这部分原代码没问题
     np.fill_diagonal(d_ij, 0.0)
     np.fill_diagonal(d_ji, 0.0)
-    # three-body scaling
+
+    # --- Three-body scaling ---
     mean_e = mu_e / (s ** 2)
     std_e = sigma_e / s
     e_ijk = np.random.normal(mean_e, std_e, (s, s, s))
 
-    # -------- 清零 e[i,i,i] --------
-    for i in range(s):
-        e_ijk[i, i, i] = 0.0
+    # -------- 优化后的清零逻辑 --------
+    # 使用 NumPy 切片代替双重循环，速度提升显著
+    # 同时也覆盖了所有索引重复的情况
 
-    # -------- 清零 e[i,i,k] --------
     for i in range(s):
-        for k in range(s):
-            e_ijk[i, i, k] = 0.0
-
-    # -------- 清零 e[i,j,i] --------
-    for i in range(s):
-        for j in range(s):
-            e_ijk[i, j, i] = 0.0
+        e_ijk[i, i, :] = 0.0  # 对应原代码的 e[i,i,k] (包含了 e[i,i,i])
+        e_ijk[i, :, i] = 0.0  # 对应原代码的 e[i,j,i]
+        e_ijk[:, i, i] = 0.0  # 【新增】对应 e[k,i,i]，即后两个索引相同的情况
 
     return c_i, d_ij, d_ji, e_ijk
 
@@ -149,10 +146,10 @@ def main():
     mu_e_min = -0.5
     mu_e_max = 0.5
     s = 50
-    sigma_d = 0.1
-    sigma_e = 0.1
+    sigma_d = 0.3
+    sigma_e = 0.5
     t_steps = 3000
-    repeats = 1
+    repeats = 10
     workers = None
     out = "out_mu_d_mu_e"
 

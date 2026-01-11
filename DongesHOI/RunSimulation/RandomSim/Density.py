@@ -7,11 +7,18 @@ import matplotlib.pyplot as plt
 # 参数生成
 # -----------------------------
 def generate_parameters(s, mu_d, sigma_d, mu_e, sigma_e):
+    # 生成 d 矩阵
     d = np.random.normal(mu_d / s, sigma_d / np.sqrt(s), (s, s))
     np.fill_diagonal(d, 0)
-    e = np.random.normal(mu_e / s**2, sigma_e / s, (s, s, s))
+
+    # 生成 e 张量
+    e = np.random.normal(mu_e / s, sigma_e / s ** 2, (s, s, s))
+
     for i in range(s):
-        e[i, i, i] = 0
+        e[i, i, :] = 0  # 设置 e[i, i, k] = 0 (前两个索引相同)
+        e[i, :, i] = 0  # 设置 e[i, j, i] = 0 (首尾索引相同)
+        e[:, i, i] = 0  # 设置 e[k, i, i] = 0 (后两个索引相同)
+
     return d, e
 
 # -----------------------------

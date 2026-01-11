@@ -45,7 +45,7 @@ def plot_csv(csv_path, out_dir):
                      fmt='o-', capsize=4, label=f"mu_d={mu}")
 
     plt.xlabel("sigma_d")
-    plt.ylabel("survival rate")
+    plt.ylabel("Tipping rate")
     plt.title(fname)
     plt.grid(True)
     plt.legend()

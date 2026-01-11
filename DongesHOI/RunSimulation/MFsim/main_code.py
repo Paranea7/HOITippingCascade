@@ -66,7 +66,18 @@ def run_single_simulation(seed, params, initial_x_mean, initial_x_std):
     if params['sigma_e'] == 0 and params['mu_e'] == 0:
         e_tensor = np.zeros((0, 0, 0))
     else:
-        e_tensor = np.random.normal(params['mu_e']/S**2, params['sigma_e']/S, size=(S, S, S))
+        e_tensor = np.random.normal(params['mu_e'] / S ** 2,
+                                    params['sigma_e'] / S,
+                                    size=(S, S, S))
+
+        # 创建索引矩阵
+        i, j, k = np.indices((S, S, S))
+
+        # 构造重复索引的掩码
+        mask = (i == j) | (j == k) | (i == k)
+
+        # 向量化置零
+        e_tensor[mask] = 0
 
     x_init = np.random.normal(initial_x_mean, initial_x_std, size=S)
 
@@ -140,33 +151,44 @@ def calculate_theoretical_properties(params, initial_x_mean_guess,
     mu_e = params['mu_e']
     sigma_e = params['sigma_e']
 
-    m_th = initial_x_mean_guess
-    q_th = initial_x_mean_guess ** 2
+    # 初始自洽猜测
+    m = initial_x_mean_guess
+    q = initial_x_mean_guess ** 2
 
-    z_samples = np.random.normal(0, 1, num_h_samples)
+    # 预生成标准高斯
+    z = np.random.normal(0, 1, num_h_samples)
 
     for _ in range(max_iter):
-        mu_h = mu_c + mu_d * m_th + mu_e * (m_th**2)
-        sigma_h2 = sigma_c**2 + sigma_d**2 * q_th + sigma_e**2 * (q_th**2)
-        sigma_h = max(0, sigma_h2) ** 0.5
 
-        h_samples = mu_h + sigma_h * z_samples
-        x_samples = np.array([solve_for_x_stable(h, m_th) for h in h_samples])
-        x_samples = x_samples[~np.isnan(x_samples)]
-        if len(x_samples) == 0:
+        # -------- 与模拟一致的缩放 --------
+        mu_h = mu_c + mu_d * m + mu_e * (m**2)
+        sigma_h2 = sigma_c**2 + sigma_d**2 * q + sigma_e**2 * (q**2)
+        sigma_h = np.sqrt(max(sigma_h2, 0))
+
+        # 理论输入场 h 分布
+        h = mu_h + sigma_h * z
+
+        # 求每个 h 的稳定解（与模拟动力学一致）
+        x = np.array([solve_for_x_stable(hi, m) for hi in h])
+        x = x[~np.isnan(x)]
+        if len(x) == 0:
             return np.nan, np.nan, np.nan, np.array([])
 
-        m_new = np.mean(x_samples)
-        q_new = np.mean(x_samples**2)
+        m_new = np.mean(x)
+        q_new = np.mean(x**2)
 
-        if abs(m_new - m_th) + abs(q_new - q_th) < tol:
+        # 收敛
+        if abs(m_new - m) + abs(q_new - q) < tol:
             break
 
-        m_th = (1 - damping) * m_th + damping * m_new
-        q_th = (1 - damping) * q_th + damping * q_new
+        # 阻尼更新
+        m = (1 - damping) * m + damping * m_new
+        q = (1 - damping) * q + damping * q_new
 
-    phi_th = np.mean(x_samples > 0)
-    return m_th, q_th, phi_th, x_samples
+    # φ = 正根概率
+    phi = np.mean(x > 0)
+
+    return m, q, phi, x
 
 
 # ==========================================================
@@ -353,8 +375,8 @@ def run_phase_scan_sigma(sim_params):
     initial_mean = -0.6
     initial_std = 0.0
 
-    sigma_d_list = np.linspace(0.0, 0.6, 7)
-    sigma_e_list = np.linspace(0.0, 0.6, 7)
+    sigma_d_list = np.linspace(0.0, 0.6, 14)
+    sigma_e_list = np.linspace(0.0, 0.6, 14)
 
     sim_grid, th_grid = sweep_phase_sigma_d_sigma_e(
         sim_params, sigma_d_list, sigma_e_list, num_batches, initial_mean, initial_std
@@ -367,8 +389,8 @@ def run_phase_scan_mu(sim_params):
     initial_mean = -0.6
     initial_std = 0.0
 
-    mu_d_list = np.linspace(-0.5, 0.5, 11)
-    mu_e_list = np.linspace(-0.5, 0.5, 11)
+    mu_d_list = np.linspace(-0.5, 0.5, 22)
+    mu_e_list = np.linspace(-0.5, 0.5, 22)
 
     sim_grid, th_grid = sweep_phase_mu_d_mu_e(
         sim_params, mu_d_list, mu_e_list, num_batches, initial_mean, initial_std
@@ -386,12 +408,12 @@ if __name__ == "__main__":
         'S': 50,
         'dt': 0.01,
         't_steps': 3000,
-        'mu_c': 0.0, 'sigma_c': 0.1283,
+        'mu_c': 0.0, 'sigma_c': 0.0,
         'mu_d': 0.1, 'sigma_d': 0.0,
         'mu_e': 0.1, 'sigma_e': 0.0
     }
 
-    run_scan_sigma_d(sim_params)
-    run_scan_sigma_e(sim_params)
+    #run_scan_sigma_d(sim_params)
+    #run_scan_sigma_e(sim_params)
     run_phase_scan_sigma(sim_params)
     run_phase_scan_mu(sim_params)
