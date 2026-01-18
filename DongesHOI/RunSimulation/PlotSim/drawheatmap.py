@@ -50,5 +50,5 @@ def plot_heatmap_from_csv(csv_file, out_png):
     plt.close(fig)
 
 
-# 简单测试方式：
-# plot_heatmap_from_csv("your.csv", "heatmap.png")
+
+plot_heatmap_from_csv("your.csv", "heatmap.png")

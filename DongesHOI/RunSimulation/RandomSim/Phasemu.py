@@ -118,7 +118,7 @@ def plot_heatmap(mu_d, mu_e, grid, out_png):
     fig, ax = plt.subplots(figsize=(7, 5))
     im = ax.imshow(grid, origin='lower', aspect='auto',
                    extent=[mu_d[0], mu_d[-1], mu_e[0], mu_e[-1]],
-                   cmap='viridis', vmin=0, vmax=1)
+                   cmap='viridis', vmin=0, vmax=0.6)
     ax.set_xlabel("mu_d")
     ax.set_ylabel("mu_e")
     ax.set_title("Survival rate")
@@ -146,10 +146,10 @@ def main():
     mu_e_min = -0.5
     mu_e_max = 0.5
     s = 50
-    sigma_d = 0.3
-    sigma_e = 0.5
+    sigma_d = 0.1
+    sigma_e = 0.1
     t_steps = 3000
-    repeats = 10
+    repeats = 50
     workers = None
     out = "out_mu_d_mu_e"
 
