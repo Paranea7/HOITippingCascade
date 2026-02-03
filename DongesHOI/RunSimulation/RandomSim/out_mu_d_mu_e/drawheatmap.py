@@ -112,8 +112,8 @@ def plot_heatmap_from_csv(csv_file, out_png):
     )
 
     # 设置 PNAS 风格标签 (变量用斜体)
-    ax.set_xlabel(r"$\sigma_d$")
-    ax.set_ylabel(r"$\sigma_e$")
+    ax.set_xlabel(r"$\mu_d$")
+    ax.set_ylabel(r"$\mu_e$")
 
     # 去掉冗余边框 (PNAS 风格可选)
     ax.spines['top'].set_visible(False)
