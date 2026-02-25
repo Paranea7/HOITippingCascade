@@ -172,7 +172,7 @@ def plot_series_with_error(x, series, xlabel, title, outpath, show_se=SHOW_SE, f
             plt.plot(x, y, label=label, **current_style)
 
     plt.xlabel(xlabel)
-    plt.ylabel("Tipping Rate")
+    plt.ylabel(r"Tipping Rate $\phi$")
     plt.title(title, fontsize=10)  # 标题字号可以稍大
     # plt.grid(True) # PRL 风格通常不显示网格线，已在 rcParams 中设置为 False
     plt.legend(loc='best', frameon=False)  # 图例放置在最佳位置，不带边框

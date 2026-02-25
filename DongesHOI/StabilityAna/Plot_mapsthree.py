@@ -22,7 +22,7 @@ bounds = np.arange(-0.5, MAX_STABLE_DISPLAY + 1.5, 1.0)
 norm = BoundaryNorm(bounds, cmap.N, clip=True)
 
 # 输出目录
-OUTDIR = "stability_results_3sys_threebody_fixE"
+OUTDIR = "stability_results_3sys_threebody"
 
 def load_map(e123, e231):
     fn = os.path.join(OUTDIR, f"stabmap_e123_{e123}_e231_{e231}.npy")

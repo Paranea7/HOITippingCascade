@@ -142,12 +142,12 @@ def plot_heatmap(mu_d, mu_e, grid, out_png):
         extent=[mu_d[0], mu_d[-1], mu_e[0], mu_e[-1]],
         cmap='viridis',
         vmin=0,
-        vmax=vmax
+        vmax=0.6
     )
     ax.set_xlabel("mu_d")
     ax.set_ylabel("mu_e")
-    ax.set_title("Survival rate")
-    plt.colorbar(im, ax=ax, label=f"Survival rate (max={vmax:.3f})")
+    ax.set_title("Tipping rate")
+    plt.colorbar(im, ax=ax, label=f"Tipping rate ")
     fig.tight_layout()
     fig.savefig(out_png, dpi=150)
     plt.close(fig)
@@ -176,7 +176,7 @@ def main():
     sigma_e = 0.5
 
     t_steps = 3000
-    repeats = 5
+    repeats = 50
     workers = None
 
     out = "out_mu_d_mu_e"
