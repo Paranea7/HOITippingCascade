@@ -11,44 +11,33 @@ c_low = 0.0
 
 
 # ---------------- 参数生成（含 d[ii] 和 e 相关项清零） ----------------
-def generate_parameters(s, mu_d, sigma_d, rho_d, mu_e, sigma_e):
+def generate_parameters(s, mu_c, sigma_c, mu_d, sigma_d, rho_d, mu_e, sigma_e):
+    c_i = np.random.normal(mu_c, sigma_c, s)
 
-    # 固定比例 c_i
-    c_i = np.full(s, c_low)
-    n_high = int(phi0 * s)
-    idx = np.random.choice(s, n_high, replace=False)
-    c_i[idx] = c_high
-
-    # -------- 二体耦合 --------
+    # --- Two-body scaling ---
     mean_d = mu_d / s
     std_d = sigma_d / np.sqrt(s)
     d_ij = np.random.normal(mean_d, std_d, (s, s))
-    d_ji = rho_d * d_ij + np.sqrt(max(0, 1 - rho_d**2)) * \
+    d_ji = rho_d * d_ij + np.sqrt(1 - rho_d ** 2) * \
            np.random.normal(mean_d, std_d, (s, s))
 
-    # -------- 强制 d[ii] = 0 --------
+    # 优化：直接使用 fill_diagonal，这部分原代码没问题
     np.fill_diagonal(d_ij, 0.0)
     np.fill_diagonal(d_ji, 0.0)
 
-    # -------- 三体耦合生成 --------
-    mean_e = mu_e / (s**2)
+    # --- Three-body scaling ---
+    mean_e = mu_e / (s ** 2)
     std_e = sigma_e / s
     e_ijk = np.random.normal(mean_e, std_e, (s, s, s))
 
-    # -------- 清零三体所有自耦合项 --------
-    # e[i,i,i] = 0
-    for i in range(s):
-        e_ijk[i, i, i] = 0.0
+    # -------- 优化后的清零逻辑 --------
+    # 使用 NumPy 切片代替双重循环，速度提升显著
+    # 同时也覆盖了所有索引重复的情况
 
-    # e[i,i,k] = 0
     for i in range(s):
-        for k in range(s):
-            e_ijk[i, i, k] = 0.0
-
-    # e[i,j,i] = 0
-    for i in range(s):
-        for j in range(s):
-            e_ijk[i, j, i] = 0.0
+        e_ijk[i, i, :] = 0.0  # 对应原代码的 e[i,i,k] (包含了 e[i,i,i])
+        e_ijk[i, :, i] = 0.0  # 对应原代码的 e[i,j,i]
+        e_ijk[:, i, i] = 0.0  # 【新增】对应 e[k,i,i]，即后两个索引相同的情况
 
     return c_i, d_ij, d_ji, e_ijk
 
