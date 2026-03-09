@@ -38,7 +38,7 @@ m_range = np.linspace(-1.2, 1.2, 100)
 h_c = 0.3849
 
 # 基准参数
-d_b, e_b, s_b = 0.5, 0.5, 0.8
+d_b, e_b, s_b = 0.2, 0.2, 0.3
 
 # 扫描范围
 scan_d = np.linspace(-0.5, 1.0, 50)
@@ -65,7 +65,7 @@ axes[1, 0].axvline(h_c, color='gray', ls='--', alpha=0.6, label='$H_c$')
 axes[1, 0].set_xlabel(r'Field $\mu_d$')
 
 # --- Panel 2: Varying mu_e (非线性反馈/斜率) ---
-m_test_e = 0.5
+m_test_e = -0.6
 for i, v in enumerate([0.2, 0.8, 1.4]):
     m_theo = theory_m_out(m_range, d_b, v, s_b, h_c)
     axes[0, 1].plot(m_range, m_theo, color=colors[i], label=rf'$\mu_e={v}$')
@@ -75,7 +75,7 @@ axes[1, 1].plot(scan_e, phi_e, 'k-')
 axes[1, 1].set_xlabel(r'Coupling $\mu_e$ (at $m_{in}=0.5$)')
 
 # --- Panel 3: Varying sigma (噪声激活) ---
-m_test_s = 0.4
+m_test_s = -0.6
 for i, v in enumerate([0.1, 0.25, 0.5]):
     m_theo = theory_m_out(m_range, d_b, e_b, v, h_c)
     axes[0, 2].plot(m_range, m_theo, color=colors[i], label=rf'$\sigma={v}$')
