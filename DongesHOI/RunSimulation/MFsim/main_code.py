@@ -1,20 +1,64 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from numba import jit
 from joblib import Parallel, delayed
+import time
 
 
 # ==========================================================
-# 1. 动力学部分
+# 0. PNAS 绘图风格配置 (学术发表级)
+# ==========================================================
+def set_pnas_style():
+    """配置 Matplotlib 以符合 PNAS 风格"""
+    plt.style.use('default')
+
+    # PNAS 单栏宽度约为 3.42 英寸 (8.7cm)
+    fig_width = 4.0
+    fig_height = 3.2
+
+    params = {
+        'font.family': 'sans-serif',
+        'font.sans-serif': ['Arial', 'Helvetica', 'DejaVu Sans', 'SimHei'],
+        'font.size': 10,
+        'axes.labelsize': 10,
+        'axes.titlesize': 10,
+        'legend.fontsize': 8,
+        'xtick.labelsize': 8,
+        'ytick.labelsize': 8,
+        'mathtext.fontset': 'stixsans',
+        'lines.linewidth': 1.5,
+        'lines.markersize': 5,
+        'axes.linewidth': 0.8,
+        'xtick.direction': 'in',
+        'ytick.direction': 'in',
+        'xtick.major.size': 3,
+        'ytick.major.size': 3,
+        'xtick.top': True,
+        'ytick.right': True,
+        'figure.figsize': [fig_width, fig_height],
+        'figure.dpi': 150,
+        'savefig.dpi': 600,
+        'axes.grid': False,
+        'figure.autolayout': False,
+    }
+    mpl.rcParams.update(params)
+
+
+set_pnas_style()
+
+
+# ==========================================================
+# 1. 动力学核心 (Numba 加速)
 # ==========================================================
 
 @jit(nopython=True, cache=True)
 def compute_rhs(x, c, d_matrix, e_tensor):
-    nonlinear_term = -x**3 + x
-    d_term = d_matrix @ x
+    """计算朗之万方程右侧项"""
     S = x.shape[0]
+    nonlinear_term = -x ** 3 + x
+    d_term = d_matrix @ x
     e_term = np.zeros(S)
-
     if e_tensor.shape[0] > 0:
         for i in range(S):
             val = 0.0
@@ -22,398 +66,232 @@ def compute_rhs(x, c, d_matrix, e_tensor):
                 for k in range(S):
                     val += e_tensor[i, j, k] * x[j] * x[k]
             e_term[i] = val
-
     return nonlinear_term + c + d_term + e_term
 
 
 @jit(nopython=True, cache=True)
 def rk4_step(x, dt, c, d_matrix, e_tensor):
+    """四阶龙格-库塔积分步"""
     k1 = compute_rhs(x, c, d_matrix, e_tensor)
     k2 = compute_rhs(x + 0.5 * dt * k1, c, d_matrix, e_tensor)
     k3 = compute_rhs(x + 0.5 * dt * k2, c, d_matrix, e_tensor)
     k4 = compute_rhs(x + dt * k3, c, d_matrix, e_tensor)
-    return x + (dt/6)*(k1 + 2*k2 + 2*k3 + k4)
+    return x + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
 
 
 @jit(nopython=True, cache=True)
 def simulate_dynamics_jit(x_init, dt, t_steps, c, d_matrix, e_tensor):
+    """执行完整的动力学演化"""
     x = x_init.copy()
-    S = x.shape[0]
-    m_hist = np.zeros(t_steps)
-    q_hist = np.zeros(t_steps)
-
     for t in range(t_steps):
         x = rk4_step(x, dt, c, d_matrix, e_tensor)
-        m_hist[t] = np.mean(x)
-        q_hist[t] = np.mean(x**2)
-
-    return x, m_hist, q_hist
+    return x
 
 
 # ==========================================================
-# 2. 并行模拟部分（带 φ 列表）
+# 2. 模拟运行器 (处理随机矩阵与并行)
 # ==========================================================
 
 def run_single_simulation(seed, params, initial_x_mean, initial_x_std):
+    """运行单次实验"""
     np.random.seed(seed)
     S = params['S']
 
-    # 随机生成参数
     c = np.random.normal(params['mu_c'], params['sigma_c'], size=S)
-    d_matrix = np.random.normal(params['mu_d']/S, params['sigma_d']/np.sqrt(S), size=(S, S))
-    np.fill_diagonal(d_matrix, 0)
+    d_matrix = np.random.normal(params['mu_d'] / S, params['sigma_d'] / np.sqrt(S), size=(S, S))
+    np.fill_diagonal(d_matrix, 0.0)
 
     if params['sigma_e'] == 0 and params['mu_e'] == 0:
-        e_tensor = np.zeros((0, 0, 0))
+        e_tensor = np.zeros((S, S, S))
     else:
-        e_tensor = np.random.normal(params['mu_e'] / S ** 2,
-                                    params['sigma_e'] / S,
-                                    size=(S, S, S))
-
-        # 创建索引矩阵
-        i, j, k = np.indices((S, S, S))
-
-        # 构造重复索引的掩码
-        mask = (i == j) | (j == k) | (i == k)
-
-        # 向量化置零
-        e_tensor[mask] = 0
+        e_tensor = np.random.normal(params['mu_e'] / S ** 2, params['sigma_e'] / S, size=(S, S, S))
+        idx = np.indices((S, S, S), sparse=True)
+        mask = (idx[0] == idx[1]) | (idx[1] == idx[2]) | (idx[0] == idx[2])
+        e_tensor[mask] = 0.0
 
     x_init = np.random.normal(initial_x_mean, initial_x_std, size=S)
+    final_x = simulate_dynamics_jit(x_init, params['dt'], params['t_steps'], c, d_matrix, e_tensor)
 
-    # 演化
-    final_x, m_hist, q_hist = simulate_dynamics_jit(
-        x_init, params['dt'], params['t_steps'], c, d_matrix, e_tensor
-    )
-
-    # 统计
-    final_m = np.mean(final_x)
-    final_q = np.mean(final_x**2)
+    m = np.mean(final_x)
+    q = np.mean(final_x ** 2)
     phi = np.mean(final_x > 0)
+    return m, q, phi
 
-    return final_x, final_m, final_q, phi, m_hist, q_hist
 
-
-def run_multiple_batches_parallel(num_batches, params, initial_x_mean, initial_x_std):
-
+def run_parallel_simulations(params, num_batches, initial_mean=-0.6, initial_std=0.01):
+    """并行运行多次实验并取平均"""
+    base_seed = int(time.time())
     results = Parallel(n_jobs=-1)(
-        delayed(run_single_simulation)(i, params, initial_x_mean, initial_x_std)
+        delayed(run_single_simulation)(i + base_seed, params, initial_mean, initial_std)
         for i in range(num_batches)
     )
-
-    all_x = []
-    all_m_list = []
-    all_q_list = []
-    all_phi_list = []
-
-    last_m_hist = None
-    last_q_hist = None
-
-    for (x_fin, m, q, phi, m_hist, q_hist) in results:
-        all_x.extend(x_fin)
-        all_m_list.append(m)
-        all_q_list.append(q)
-        all_phi_list.append(phi)
-        last_m_hist = m_hist
-        last_q_hist = q_hist
-
-    return (
-        np.array(all_x),
-        np.array(all_m_list),
-        np.array(all_q_list),
-        np.array(all_phi_list),   # φ 列表返回
-        last_m_hist,
-        last_q_hist
-    )
+    results = np.array(results)
+    m_avg = np.mean(results[:, 0])
+    q_avg = np.mean(results[:, 1])
+    phi_avg = np.mean(results[:, 2])
+    phi_std = np.std(results[:, 2], ddof=1) / np.sqrt(num_batches)
+    return m_avg, q_avg, phi_avg, phi_std
 
 
 # ==========================================================
-# 3. 理论
+# 3. 理论求解器 (自洽方程迭代 - 已修正平滑度问题)
 # ==========================================================
 
-def solve_for_x_stable(h, initial_guess):
+def solve_cubic_root_hysteresis(h, current_m):
+    """求解 x^3 - x - h = 0，选择离 current_m 最近的根"""
     coeffs = [1, 0, -1, -h]
     roots = np.roots(coeffs)
     real_roots = roots[np.abs(roots.imag) < 1e-6].real
-    if len(real_roots) == 0:
-        return np.nan
-    return np.max(real_roots) if initial_guess > 0 else np.min(real_roots)
+    real_roots = np.sort(real_roots)
+
+    if len(real_roots) == 0: return 0.0
+    if len(real_roots) == 1: return real_roots[0]
+    distances = np.abs(real_roots - current_m)
+    return real_roots[np.argmin(distances)]
 
 
-def calculate_theoretical_properties(params, initial_x_mean_guess,
-                                     num_h_samples=30000, max_iter=2000,
-                                     tol=1e-5, damping=0.2):
+def theoretical_solver(params, z_samples, initial_guess_m=-0.6, tol=1e-5, max_iter=100):
+    """
+    利用空穴法/平均场理论计算稳态序参量。
 
-    mu_c = params['mu_c']
-    sigma_c = params['sigma_c']
-    mu_d = params['mu_d']
-    sigma_d = params['sigma_d']
-    mu_e = params['mu_e']
-    sigma_e = params['sigma_e']
+    关键修正：z_samples (标准正态随机数) 现在作为参数传入。
+    这保证了在扫描参数时，积分样本保持不变，从而消除曲线抖动。
+    """
+    m = initial_guess_m
+    q = initial_guess_m ** 2
+    damping = 0.2
 
-    # 初始自洽猜测
-    m = initial_x_mean_guess
-    q = initial_x_mean_guess ** 2
+    for it in range(max_iter):
+        # 1. 计算局部场 h 的统计特征
+        mu_h = params['mu_c'] + params['mu_d'] * m + params['mu_e'] * (m ** 2)/2.
+        var_h = (params['sigma_c'] ** 2 +
+                 params['sigma_d'] ** 2 * q +
+                 params['sigma_e'] ** 2 * (q ** 2)/2.)
 
-    # 预生成标准高斯
-    z = np.random.normal(0, 1, num_h_samples)
+        # 防止方差为负（数值误差）
+        if var_h < 0: var_h = 0
+        sigma_h = np.sqrt(var_h)
 
-    for _ in range(max_iter):
+        # 2. 构建局部场样本 (使用固定的 z_samples)
+        h_eff = mu_h + sigma_h * z_samples
 
-        # -------- 与模拟一致的缩放 --------
-        mu_h = mu_c + mu_d * m + mu_e * (m**2)
-        sigma_h2 = sigma_c**2 + sigma_d**2 * q + sigma_e**2 * (q**2)
-        sigma_h = np.sqrt(max(sigma_h2, 0))
+        # 3. 对每个 h 求解定点 x
+        # 注意：这里列表推导式可能较慢，向量化求解会更快，但 roots 函数难以向量化。
+        # 考虑到 num_samples 较大，这里是性能瓶颈，但对于平滑曲线是必要的。
+        x_new_samples = np.array([solve_cubic_root_hysteresis(h, m) for h in h_eff])
 
-        # 理论输入场 h 分布
-        h = mu_h + sigma_h * z
+        # 4. 更新序参量
+        m_new = np.mean(x_new_samples)
+        q_new = np.mean(x_new_samples ** 2)
 
-        # 求每个 h 的稳定解（与模拟动力学一致）
-        x = np.array([solve_for_x_stable(hi, m) for hi in h])
-        x = x[~np.isnan(x)]
-        if len(x) == 0:
-            return np.nan, np.nan, np.nan, np.array([])
+        # 5. 检查收敛
+        err = abs(m_new - m) + abs(q_new - q)
+        if err < tol:
+            phi = np.mean(x_new_samples > 0)
+            return m, q, phi
 
-        m_new = np.mean(x)
-        q_new = np.mean(x**2)
-
-        # 收敛
-        if abs(m_new - m) + abs(q_new - q) < tol:
-            break
-
-        # 阻尼更新
+        # 6. 阻尼更新
         m = (1 - damping) * m + damping * m_new
         q = (1 - damping) * q + damping * q_new
 
-    # φ = 正根概率
-    phi = np.mean(x > 0)
-
-    return m, q, phi, x
+    phi = np.mean(x_new_samples > 0)
+    return m, q, phi
 
 
 # ==========================================================
-# 4. 统一接口：返回 φ 列表 + 理论 φ
+# 4. 主程序：扫描与绘图 (PNAS 风格)
 # ==========================================================
 
-def get_sim_theory_phi(params, num_batches, initial_mean, initial_std):
-
-    _, _, _, sim_phi_list, _, _ = run_multiple_batches_parallel(
-        num_batches, params, initial_mean, initial_std
-    )
-
-    _, _, phi_th, _ = calculate_theoretical_properties(params, initial_mean)
-
-    return np.array(sim_phi_list), phi_th
-
-
-# ==========================================================
-# 5. 扫描函数（返回 φ 数组）
-# ==========================================================
-
-def sweep_sigma_d(params, sigma_d_list, num_batches, initial_mean, initial_std):
-    sim_phi_all = []
-    th_phi_all = []
-
-    for sigma_d in sigma_d_list:
-        newp = params.copy()
-        newp['sigma_d'] = sigma_d
-        sim_phi_list, th_phi = get_sim_theory_phi(newp, num_batches, initial_mean, initial_std)
-        sim_phi_all.append(sim_phi_list)
-        th_phi_all.append(th_phi)
-
-    return np.array(sim_phi_all), np.array(th_phi_all)
-
-
-def sweep_sigma_e(params, sigma_e_list, num_batches, initial_mean, initial_std):
-    sim_phi_all = []
-    th_phi_all = []
-
-    for sigma_e in sigma_e_list:
-        newp = params.copy()
-        newp['sigma_e'] = sigma_e
-        sim_phi_list, th_phi = get_sim_theory_phi(newp, num_batches, initial_mean, initial_std)
-        sim_phi_all.append(sim_phi_list)
-        th_phi_all.append(th_phi)
-
-    return np.array(sim_phi_all), np.array(th_phi_all)
-
-
-def sweep_phase_sigma_d_sigma_e(params, sigma_d_list, sigma_e_list, num_batches, initial_mean, initial_std):
-
-    sim_grid = np.zeros((len(sigma_d_list), len(sigma_e_list)))
-    th_grid = np.zeros((len(sigma_d_list), len(sigma_e_list)))
-
-    for i, sigma_d in enumerate(sigma_d_list):
-        for j, sigma_e in enumerate(sigma_e_list):
-            newp = params.copy()
-            newp['sigma_d'] = sigma_d
-            newp['sigma_e'] = sigma_e
-            sim_phi_list, th_phi = get_sim_theory_phi(newp, num_batches, initial_mean, initial_std)
-            sim_grid[i, j] = np.mean(sim_phi_list)
-            th_grid[i, j] = th_phi
-
-    return sim_grid, th_grid
-
-
-def sweep_phase_mu_d_mu_e(params, mu_d_list, mu_e_list, num_batches, initial_mean, initial_std):
-
-    sim_grid = np.zeros((len(mu_d_list), len(mu_e_list)))
-    th_grid = np.zeros((len(mu_d_list), len(mu_e_list)))
-
-    for i, mu_d in enumerate(mu_d_list):
-        for j, mu_e in enumerate(mu_e_list):
-            newp = params.copy()
-            newp['mu_d'] = mu_d
-            newp['mu_e'] = mu_e
-
-            sim_phi_list, th_phi = get_sim_theory_phi(newp, num_batches, initial_mean, initial_std)
-            sim_grid[i, j] = np.mean(sim_phi_list)
-            th_grid[i, j] = th_phi
-
-    return sim_grid, th_grid
-
-
-# ==========================================================
-# 6. 绘图（加入 errorbar）
-# ==========================================================
-
-def plot_phi_vs_sigma_d(sigma_d_list, sim_phi_mat, th_phi):
-    sim_mean = sim_phi_mat.mean(axis=1)
-    sim_sem = sim_phi_mat.std(axis=1, ddof=1) / np.sqrt(sim_phi_mat.shape[1])
-
-    plt.figure()
-    plt.errorbar(sigma_d_list, sim_mean, yerr=sim_sem, fmt='o-', label='Simulation')
-    plt.plot(sigma_d_list, th_phi, 'k--', label='Theory')
-    plt.xlabel("sigma_d")
-    plt.ylabel("phi")
-    plt.legend()
-    plt.grid()
-    plt.title("phi vs sigma_d")
-    plt.show()
-
-
-def plot_phi_vs_sigma_e(sigma_e_list, sim_phi_mat, th_phi):
-    sim_mean = sim_phi_mat.mean(axis=1)
-    sim_sem = sim_phi_mat.std(axis=1, ddof=1) / np.sqrt(sim_phi_mat.shape[1])
-
-    plt.figure()
-    plt.errorbar(sigma_e_list, sim_mean, yerr=sim_sem, fmt='o-', label='Simulation')
-    plt.plot(sigma_e_list, th_phi, 'k--', label='Theory')
-    plt.xlabel("sigma_e")
-    plt.ylabel("phi")
-    plt.legend()
-    plt.grid()
-    plt.title("phi vs sigma_e")
-    plt.show()
-
-
-def plot_phase_sigma(sigma_d_list, sigma_e_list, sim_grid, th_grid):
-    plt.figure(figsize=(12, 5))
-
-    plt.subplot(1, 2, 1)
-    plt.imshow(sim_grid, origin='lower',
-               extent=[sigma_e_list[0], sigma_e_list[-1], sigma_d_list[0], sigma_d_list[-1]],
-               aspect='auto')
-    plt.colorbar()
-    plt.title("Sim phi(sigma_d, sigma_e)")
-
-    plt.subplot(1, 2, 2)
-    plt.imshow(th_grid, origin='lower',
-               extent=[sigma_e_list[0], sigma_e_list[-1], sigma_d_list[0], sigma_d_list[-1]],
-               aspect='auto')
-    plt.colorbar()
-    plt.title("Theory phi(sigma_d, sigma_e)")
-
-    plt.show()
-
-
-def plot_phase_mu(mu_d_list, mu_e_list, sim_grid, th_grid):
-    plt.figure(figsize=(12, 5))
-
-    plt.subplot(1, 2, 1)
-    plt.imshow(sim_grid, origin='lower',
-               extent=[mu_e_list[0], mu_e_list[-1], mu_d_list[0], mu_d_list[-1]],
-               aspect='auto')
-    plt.colorbar()
-    plt.title("Sim phi(mu_d, mu_e)")
-
-    plt.subplot(1, 2, 2)
-    plt.imshow(th_grid, origin='lower',
-               extent=[mu_e_list[0], mu_e_list[-1], mu_d_list[0], mu_d_list[-1]],
-               aspect='auto')
-    plt.colorbar()
-    plt.title("Theory phi(mu_d, mu_e)")
-    plt.show()
-
-
-# ==========================================================
-# 7. 主程序（四个分程序）
-# ==========================================================
-
-def run_scan_sigma_d(sim_params):
-    num_batches = 10
-    initial_mean = -0.6
-    initial_std = 0.0
-    sigma_d_list = np.linspace(0.0, 1.5, 32)
-
-    sim_phi, th_phi = sweep_sigma_d(sim_params, sigma_d_list, num_batches, initial_mean, initial_std)
-    plot_phi_vs_sigma_d(sigma_d_list, sim_phi, th_phi)
-
-
-def run_scan_sigma_e(sim_params):
-    num_batches = 10
-    initial_mean = -0.6
-    initial_std = 0.0
-    sigma_e_list = np.linspace(0.0, 1.5, 32)
-
-    sim_phi, th_phi = sweep_sigma_e(sim_params, sigma_e_list, num_batches, initial_mean, initial_std)
-    plot_phi_vs_sigma_e(sigma_e_list, sim_phi, th_phi)
-
-
-def run_phase_scan_sigma(sim_params):
-    num_batches = 10
-    initial_mean = -0.6
-    initial_std = 0.0
-
-    sigma_d_list = np.linspace(0.0, 0.6, 14)
-    sigma_e_list = np.linspace(0.0, 0.6, 14)
-
-    sim_grid, th_grid = sweep_phase_sigma_d_sigma_e(
-        sim_params, sigma_d_list, sigma_e_list, num_batches, initial_mean, initial_std
-    )
-    plot_phase_sigma(sigma_d_list, sigma_e_list, sim_grid, th_grid)
-
-
-def run_phase_scan_mu(sim_params):
-    num_batches = 10
-    initial_mean = -0.6
-    initial_std = 0.0
-
-    mu_d_list = np.linspace(-0.5, 0.5, 22)
-    mu_e_list = np.linspace(-0.5, 0.5, 22)
-
-    sim_grid, th_grid = sweep_phase_mu_d_mu_e(
-        sim_params, mu_d_list, mu_e_list, num_batches, initial_mean, initial_std
-    )
-    plot_phase_mu(mu_d_list, mu_e_list, sim_grid, th_grid)
-
-
-# ==========================================================
-# 8. 启动
-# ==========================================================
-
-if __name__ == "__main__":
-
-    sim_params = {
-        'S': 50,
+def run_experiment_sigma_d_scan():
+    # 基础参数
+    base_params = {
+        'S': 200,
         'dt': 0.01,
-        't_steps': 3000,
-        'mu_c': 0.0, 'sigma_c': 0.0,
-        'mu_d': 0.1, 'sigma_d': 0.0,
+        't_steps': 5000,
+        'mu_c': 0.0, 'sigma_c': 0.124,
+        'mu_d': 0.1,
         'mu_e': 0.1, 'sigma_e': 0.0
     }
 
-    #run_scan_sigma_d(sim_params)
-    #run_scan_sigma_e(sim_params)
-    run_phase_scan_sigma(sim_params)
-    run_phase_scan_mu(sim_params)
+    # 扫描 sigma_d
+    sigma_d_values = np.linspace(0.0, 1.5, 16)  # 增加点数使曲线更平滑
+
+    sim_phi_list = []
+    sim_err_list = []
+    theory_phi_list = []
+
+    # ==========================================
+    # 关键步骤：预生成固定的随机样本 (Frozen Noise)
+    # ==========================================
+    print("预生成理论计算用的固定样本...")
+    num_theory_samples = 50000
+    # 固定种子，确保每次运行程序结果一致
+    rng = np.random.default_rng(seed=42)
+    frozen_z_samples = rng.standard_normal(num_theory_samples)
+
+    print(f"开始扫描 sigma_d (点数: {len(sigma_d_values)})...")
+    start_time = time.time()
+
+    for val in sigma_d_values:
+        current_params = base_params.copy()
+        current_params['sigma_d'] = val
+
+        # 1. 运行模拟 (多次取平均)
+        # 注意：模拟部分不需要冻结噪声，反而需要不同的种子来体现真实的统计误差
+        _, _, phi_sim, phi_err = run_parallel_simulations(current_params, num_batches=12)
+        sim_phi_list.append(phi_sim)
+        sim_err_list.append(phi_err)
+
+        # 2. 运行理论计算 (传入固定的 frozen_z_samples)
+        _, _, phi_th = theoretical_solver(current_params, frozen_z_samples)
+        theory_phi_list.append(phi_th)
+
+        print(f"Sigma_d={val:.2f} | Sim_Phi={phi_sim:.3f} | Thy_Phi={phi_th:.3f}")
+
+    print(f"计算完成，耗时: {time.time() - start_time:.2f} 秒")
+
+    # ==========================================
+    # 绘图逻辑
+    # ==========================================
+    color_sim = '#004488'  # 模拟数据：深蓝色
+    color_thy = '#BB5566'  # 理论曲线：深红色
+
+    fig, ax = plt.subplots()
+
+    # 1. 绘制理论线
+    ax.plot(sigma_d_values, theory_phi_list,
+            linestyle='-',
+            linewidth=2.0,
+            color=color_thy,
+            label='Theory (Mean Field)',
+            zorder=1)
+
+    # 2. 绘制模拟点 (带误差棒)
+    ax.errorbar(sigma_d_values, sim_phi_list, yerr=sim_err_list,
+                fmt='o',
+                markersize=5,
+                markeredgewidth=1.0,
+                color=color_sim,
+                ecolor=color_sim,
+                capsize=3,
+                elinewidth=1.0,
+                label='Simulation',
+                alpha=0.9,
+                zorder=2)
+
+    # 3. 标签与图例
+    ax.set_xlabel(r'Std. Dev. of 2-body Interaction $\sigma_d$')
+    ax.set_ylabel(r'Fraction of Positive States $\phi$')
+    ax.legend(frameon=False, loc='best', handlelength=1.5)
+
+    # 4. 坐标轴微调
+    ax.set_xlim(left=0)
+    ax.set_ylim(-0.05, 1.05)
+
+    plt.tight_layout()
+    # plt.savefig('pnas_figure_smooth.pdf', format='pdf', bbox_inches='tight')
+    plt.show()
+
+
+if __name__ == "__main__":
+    run_experiment_sigma_d_scan()

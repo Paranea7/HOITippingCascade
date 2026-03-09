@@ -111,7 +111,7 @@ def compute_grid(
     sigma_d_vals,
     sigma_e_vals,
     t_steps=3000,
-    repeats=10,
+    repeats=50,
     n_workers=None
 ):
 
@@ -175,12 +175,12 @@ def save_grid_csv(sigma_d_vals, sigma_e_vals, grid,
 def main():
 
     s = 50
-    mu_e = 0.5
+    mu_e = 0.4
     mu_d = 0.2
     nx = 100
     ny = 100
     t_steps = 3000
-    repeats = 5
+    repeats = 50
     n_workers = None
     out_dir = "output_phase_Sigma"
 

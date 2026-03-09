@@ -146,7 +146,7 @@ def main():
     mu_e_min = -0.5
     mu_e_max = 0.5
     s = 50
-    sigma_d = 0.1
+    sigma_d = 0.3
     sigma_e = 0.1
     t_steps = 3000
     repeats = 50
