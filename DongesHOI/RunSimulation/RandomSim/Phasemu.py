@@ -147,7 +147,7 @@ def main():
     mu_e_max = 0.5
     s = 50
     sigma_d = 0.3
-    sigma_e = 0.1
+    sigma_e = 0.3
     t_steps = 3000
     repeats = 50
     workers = None

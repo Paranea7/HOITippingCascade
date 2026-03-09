@@ -12,7 +12,7 @@ def generate_parameters(s, mu_d, sigma_d, mu_e, sigma_e):
     np.fill_diagonal(d, 0)
 
     # 生成 e 张量
-    e = np.random.normal(mu_e / s, sigma_e / s ** 2, (s, s, s))
+    e = np.random.normal(mu_e / s ** 2, sigma_e / s, (s, s, s))
 
     for i in range(s):
         e[i, i, :] = 0  # 设置 e[i, i, k] = 0 (前两个索引相同)
