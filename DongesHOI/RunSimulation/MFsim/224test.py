@@ -80,9 +80,9 @@ for i, sig in enumerate([0.1, 0.35]):
     # 增加 steps 确保达到稳态
     ms = [np.mean(solve_system(0.0, mu_d_fixed, me, sig, steps=4000)[0][-800:]) for me in mu_e_range]
     ax_a.plot(mu_e_range, ms, 'o-', mfc='none', color=colors[i], label=rf'$\sigma={sig}$')
-ax_a.set_xlabel(r'Synergistic Coupling $\mu_e$')
-ax_a.set_ylabel(r'Order Parameter $m$')
-ax_a.set_title("A. Discontinuous Transition")
+ax_a.set_xlabel(r'$\mu_e$')
+ax_a.set_ylabel(r'$m$')
+ax_a.set_title(r"A. Simulation $\mu_e$ Sweep")
 ax_a.legend(frameon=False)
 
 # --- B. 临界跳变率分析 (与模拟对齐版) ---
@@ -101,8 +101,8 @@ for i, sig in enumerate([0.15, 0.3]):
     ax_b.plot(mu_e_fine, phi_vals, 's-', mfc='none', markersize=4, color=colors[i + 1], label=rf'$\sigma={sig}$')
 
 ax_b.set_xlabel(r'$\mu_e$')
-ax_b.set_ylabel(r'Tipping Rate $\phi$')
-ax_b.set_title("B. Analytical Probability")
+ax_b.set_ylabel(r' $\phi$')
+ax_b.set_title(r"B. Tipping Rate $\phi$")
 ax_b.legend(frameon=False)
 
 # --- C. PDF 演化 ---
@@ -130,7 +130,7 @@ for i, me in enumerate([0.6, 1.0, 1.4]):
     m_history, _, _ = solve_system(0.0, mu_d_fixed, me, 0.2, steps=8000)
     ax_e.plot(times, m_history, color=colors[i], label=rf'$\mu_e={me}$')
 ax_e.set_xlabel('Time $t$'); ax_e.set_ylabel(r'$m(t)$')
-ax_e.set_title("E. Temporal Jump Dynamics")
+ax_e.set_title("E. Temporal Evolution")
 ax_e.axhline(-0.6, ls=':', color='black', alpha=0.5, label='$m_0$')
 ax_e.legend(frameon=False, ncol=4, fontsize=8)
 

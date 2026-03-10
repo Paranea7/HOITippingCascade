@@ -58,7 +58,7 @@ for i, mu_val in enumerate([0.4, 0.8]):
     ax_a.plot(sigma_range, ms, 'o-', color=colors[i], label=rf"$\mu_d={mu_val}$")
 ax_a.set_xlabel(r'$\sigma$')
 ax_a.set_ylabel(r'$m$')
-ax_a.set_title(r"A. Equilibrium $m$ vs $\sigma$")
+ax_a.set_title(r"A. Simulation $\sigma$ Sweep")
 ax_a.legend(frameon=False)
 
 # --- B. 临界跳变率分析 (解析平滑版) ---
@@ -90,8 +90,8 @@ for i, mu_e_val in enumerate([0.6, 0.9]):
 
     ax_b.plot(sigma_fine, phi_list, '-', color=colors[i + 2], label=rf"$\mu_e={mu_e_val}$")
 
-ax_b.set_xlabel(r'Noise $\sigma$')
-ax_b.set_ylabel(r'Tipping Rate $\phi$')
+ax_b.set_xlabel(r'$\sigma$')
+ax_b.set_ylabel(r'$\phi$')
 ax_b.set_title(r"B. Tipping rate $\phi$")
 ax_b.legend(frameon=False)
 ax_b.grid(True, linestyle=':', alpha=0.5)
@@ -104,7 +104,7 @@ for i, sig in enumerate(sigmas):
     ax_c.hist(final_x, bins=35, density=True, alpha=0.4, color=colors[i], label=rf"$\sigma={sig}$")
 ax_c.set_xlabel(r'$x_i$');
 ax_c.set_ylabel('PDF')
-ax_c.set_title(r"C. PDF vs Sigma")
+ax_c.set_title(r"C. PDF Evolution")
 ax_c.legend(frameon=False)
 
 # --- D. 有限尺寸效应 ---
@@ -124,9 +124,9 @@ times = np.arange(8000) * 0.02
 for i, sig in enumerate([0.15, 0.35, 0.6]):
     m_history, _, _ = solve_system(-0.1, 0.5, 0.5, sig, steps=8000)
     ax_e.plot(times, m_history, color=colors[i], label=rf"$\sigma={sig}$", alpha=0.8)
-ax_e.set_xlabel('Time $t$');
+ax_e.set_xlabel('Time');
 ax_e.set_ylabel(r'$m(t)$')
-ax_e.set_title("E. Noise-induced Escape")
+ax_e.set_title("E. Temporal Evolution")
 ax_e.legend(frameon=False, ncol=3)
 
 plt.tight_layout()
