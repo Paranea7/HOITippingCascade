@@ -83,7 +83,7 @@ def rk4_step_numba(x, d, e, c, dt):
 
 
 def simulate_trajectory(s, t_steps, dt, d, e, c):
-    x = np.full(s, -0.6)
+    x = np.full(s, -1.0)
     traj = np.zeros((t_steps, s))
     for t in range(t_steps):
         traj[t] = x
@@ -97,11 +97,11 @@ def simulate_trajectory(s, t_steps, dt, d, e, c):
 
 if __name__ == "__main__":
     # --- 参数设置 ---
-    s = 60
+    s = 50
     t_steps = 6000
     dt = 0.01
-    mu_d, sigma_d = 0.2, 0.3
-    mu_e, sigma_e = 0.3, 0.4
+    mu_d, sigma_d = -0.2, 0.3
+    mu_e, sigma_e = 0.3, 0.3
 
     print(f"Generating data...")
     d_mat, e_mat = generate_parameters(s, mu_d, sigma_d, mu_e, sigma_e)

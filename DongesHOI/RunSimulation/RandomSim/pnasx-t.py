@@ -103,7 +103,7 @@ def rk4_step_numba(x, d, e, c, dt):
 
 
 def simulate_trajectory(s, t_steps, dt, d, e, c):
-    x = np.full(s, -0.6)
+    x = np.full(s, -1.0)
     traj = np.zeros((t_steps, s))
     for t in range(t_steps):
         traj[t] = x

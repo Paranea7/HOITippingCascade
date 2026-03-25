@@ -3,39 +3,84 @@ from numba import njit
 from multiprocessing import Pool, cpu_count
 import matplotlib.pyplot as plt
 import time
-
+import matplotlib as mpl
 
 # ==========================================
 # 1. PNAS 绘图风格配置
-# ==========================================
-def set_pnas_style_no_latex():
-    plt.rcParams.update({
-        "text.usetex": False,
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
-        "font.size": 9,
-        "axes.labelsize": 9,
-        "axes.titlesize": 10,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
-        "legend.fontsize": 8,
-        "axes.linewidth": 1.0,
-        "lines.linewidth": 1.5,
-        "xtick.direction": "out",
-        "ytick.direction": "out",
-        "xtick.top": False,
-        "ytick.right": False,
-        "figure.constrained_layout.use": True,
-        "axes.prop_cycle": plt.cycler(color=["#0072B2", "#D55E00", "#009E73"])  # 蓝, 橙, 绿
-    })
+mpl.rcParams.update({
 
+    # --- 基本字体与文本 ---
+    "text.usetex": False,               # 如果你有 LaTeX 环境，改为 True
+    "mathtext.fontset": "stix",         # 数学字体接近 Times
+    "font.family": "STIXGeneral",       # 正文字体接近 Times
+    "font.size": 10,                    # 正文字体大小
+    "axes.labelsize": 11,               # 坐标轴标签
+    "axes.titlesize": 11,               # 子图标题
+    "legend.fontsize": 8,               # 图例字号
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+
+    # --- 线条与标记 ---
+    "lines.linewidth": 1.5,
+    "lines.markersize": 4,
+    "lines.markeredgewidth": 0.5,
+
+    # --- 画布与子图 ---
+    "figure.dpi": 150,
+    "figure.figsize": (3.4, 2.5),       # 单栏图接近 PRL 单栏宽度 ~3.4 in
+    "figure.autolayout": False,         # 通常配合 plt.tight_layout() 使用
+
+    # --- 坐标轴与边框 ---
+    "axes.linewidth": 1.0,
+    "axes.spines.top": True,
+    "axes.spines.right": True,
+    "axes.spines.left": True,
+    "axes.spines.bottom": True,
+    "axes.grid": False,
+    "axes.formatter.use_mathtext": True,
+
+    # --- 刻度样式（PRL 常用内刻度，四边都有）---
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.top": True,
+    "ytick.right": True,
+    "xtick.minor.visible": True,
+    "ytick.minor.visible": True,
+    "xtick.major.size": 4,
+    "xtick.minor.size": 2,
+    "ytick.major.size": 4,
+    "ytick.minor.size": 2,
+    "xtick.major.width": 1.0,
+    "ytick.major.width": 1.0,
+    "xtick.minor.width": 0.8,
+    "ytick.minor.width": 0.8,
+
+    # --- 图例 ---
+    "legend.frameon": False,            # PRL 常用无边框 legend
+    "legend.framealpha": 1.0,
+    "legend.fancybox": False,
+    "legend.borderpad": 0.2,
+    "legend.handlelength": 1.4,
+    "legend.handletextpad": 0.4,
+
+    # --- 保存图像 ---
+    "savefig.dpi": 300,                 # 投稿时导出 300 dpi 光栅图
+    "savefig.transparent": False,
+    "savefig.bbox": "tight",
+    "savefig.pad_inches": 0.02,
+
+    # --- 颜色循环（可根据期刊黑白打印需求调整） ---
+    "axes.prop_cycle": mpl.cycler(
+        color=["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e", "#8c564b"]
+    ),
+})
 
 def simple_axis(ax):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
 
-set_pnas_style_no_latex()
+
 
 
 # ==========================================
@@ -99,7 +144,7 @@ def simulate_and_check_backtipping(s, t_steps, dt, d, e, c):
     """
     专门为 Back-tipping 优化的模拟函数。
     """
-    x = np.full(s, -0.6)  # 初始状态
+    x = np.full(s, -1.0)  # 初始状态
 
     # 记录每个节点是否曾经 > 0
     has_tipped_once = np.zeros(s, dtype=np.bool_)
