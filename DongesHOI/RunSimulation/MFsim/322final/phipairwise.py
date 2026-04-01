@@ -6,6 +6,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+
 # ==========================================
 # 1. 全局 PRL 風格配置
 # ==========================================
@@ -24,77 +25,108 @@ def set_prl_style():
         "figure.dpi": 150
     })
 
+
 set_prl_style()
 colors = ['#1f77b4', '#d62728', '#2ca02c', '#ff7f0e']
 
 # 系統核心參數
 SIG_U = 0.12
-SIG_D = 0.05
-SIG_E = 0.0
-H_C = 0.3849
+SIG_E = 0.05  # 理论推导中包含的三体涨落
+H_C = 0.3849  # 临界阈值 2/(3*sqrt(3))
+
 
 # ==========================================
-# 2. 核心解析工具 (精確根)
+# 2. 核心解析工具 (包含截断逻辑)
 # ==========================================
-def get_x_roots_exact(M):
+def get_x_roots_with_truncation(M):
+    """
+    求解 x^3 - x = M 的稳定根。
+    若 M > H_c，负分支消失，返回 (NaN, xp)
+    """
     roots = np.roots([1, 0, -1, -M])
     real_roots = np.sort(roots[np.isreal(roots)].real)
-    if len(real_roots) == 3:
-        return real_roots[0], real_roots[-1]
-    return (real_roots[0], real_roots[0]) if M < 0 else (real_roots[-1], real_roots[-1])
 
-def solve_theory_unified(mu_d, sig_d, mu_e=0.0, x0_guess=[-1.0, 1.0]):
+    # 截断机制：只有当 M <= H_c 且存在三个实根时，负分支才存在
+    if len(real_roots) == 3 and M <= H_C:
+        return real_roots[0], real_roots[-1]
+    else:
+        # 确定性跳变区：负分支消失，只剩正分支
+        return np.nan, real_roots[-1]
+
+
+def solve_theory_unified(mu_d, sig_d, mu_e=0.0, sig_e=0.0, x0_guess=[-1.0, 1.0]):
     def equations(vars):
         m, q = vars
-        M = mu_d * m + mu_e * q
-        Gamma = np.sqrt(SIG_U**2 + sig_d**2 * q)
-        phi = 0.5 * (1 + erf((M - H_C) / (np.sqrt(2) * Gamma)))
-        xn, xp = get_x_roots_exact(M)
-        res_m = m - ((1 - phi) * xn + phi * xp)
-        res_q = q - ((1 - phi) * xn**2 + phi * xp**2)
-        return [res_m, res_q]
+        # 1. 有效场均值 (m^2 逻辑)
+        M = mu_d * m + mu_e * (m ** 2)
 
+        # 2. 有效场总方差 (修正后的自洽方程：包含 sigma_e^2 * q^2)
+        Gamma2 = SIG_U ** 2 + (sig_d ** 2) * q + (sig_e ** 2) * (q ** 2)
+        Gamma = np.sqrt(Gamma2)
+
+        # 3. 根的获取与截断判断
+        xn, xp = get_x_roots_with_truncation(M)
+
+        if np.isnan(xn):
+            # 确定性跳变：phi 强制为 1
+            phi = 1.0
+            target_m = xp
+            target_q = xp ** 2
+        else:
+            # 噪声诱导跳变：计算 erf 概率
+            phi = 0.5 * (1 + erf((M - H_C) / (np.sqrt(2) * Gamma)))
+            target_m = (1 - phi) * xn + phi * xp
+            target_q = (1 - phi) * (xn ** 2) + phi * (xp ** 2)
+
+        return [m - target_m, q - target_q]
+
+    # 解自洽方程组
     sol = fsolve(equations, x0=x0_guess, xtol=1e-9)
     m_f, q_f = sol
-    M_f = mu_d * m_f + mu_e * q_f
-    G_f = np.sqrt(SIG_U**2 + sig_d**2 * q_f)
-    phi_f = 0.5 * (1 + erf((M_f - H_C) / (np.sqrt(2) * G_f)))
+
+    # 重新计算最终的 phi 以便绘图
+    M_f = mu_d * m_f + mu_e * m_f ** 2
+    if M_f > H_C:
+        phi_f = 1.0
+    else:
+        G_f = np.sqrt(SIG_U ** 2 + sig_d ** 2 * q_f + sig_e ** 2 * q_f ** 2)
+        phi_f = 0.5 * (1 + erf((M_f - H_C) / (np.sqrt(2) * G_f)))
+
     return m_f, q_f, phi_f
 
+
 # ==========================================
-# 3. 1x2 繪圖任務 (僅保留 Tipping Rate)
+# 3. 绘图任务 (1x2 布局)
 # ==========================================
-# 修改布局為 1 row, 2 columns，調整高度 figsize 保持比例
 fig, axs = plt.subplots(1, 2, figsize=(8.5, 3.5), dpi=150)
 plt.subplots_adjust(wspace=0.3)
 
-# 參數設定
 mu_range = np.linspace(-1.2, 0.6, 100)
 sig_range = np.linspace(0.05, 1.5, 100)
 sig_samples = [0.1, 0.25, 0.35]
 mu_samples = [-0.6, -0.2, 0.4]
 
-# --- 左圖：Scan mu_d (對應原圖 c) ---
+# --- 左图：扫描 mu_d (均值效应) ---
 for i, s in enumerate(sig_samples):
     p_l = []
-    curr_guess = [-1.0, 1.0]
+    curr_guess = [-1.0, 1.0]  # 初始于负分支
     for mu in mu_range:
-        m, q, p = solve_theory_unified(mu, s, x0_guess=curr_guess)
+        m, q, p = solve_theory_unified(mu, s, sig_e=SIG_E, x0_guess=curr_guess)
         p_l.append(p)
         curr_guess = [m, q]
     axs[0].plot(mu_range, p_l, color=colors[i], label=rf"$\sigma_d={s}$")
 
-# --- 右圖：Scan sigma_d (對應原圖 d) ---
+# --- 右图：扫描 sigma_d (异构性效应) ---
 for i, m_val in enumerate(mu_samples):
     p_l = []
     curr_guess = [-1.0, 1.0]
     for sig in sig_range:
-        m, q, p = solve_theory_unified(m_val, sig, x0_guess=curr_guess)
+        m, q, p = solve_theory_unified(m_val, sig, sig_e=SIG_E, x0_guess=curr_guess)
         p_l.append(p)
         curr_guess = [m, q]
     axs[1].plot(sig_range, p_l, color=colors[i], label=rf"$\mu_d={m_val}$")
 
-# 圖形美化
+# 图形美化
 sub_labels = ['(a)', '(b)']
 for i, ax in enumerate(axs):
     ax.grid(True, ls=':', alpha=0.6)
