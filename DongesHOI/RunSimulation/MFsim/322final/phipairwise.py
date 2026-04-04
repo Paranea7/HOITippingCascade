@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore")
 
 
 # ==========================================
-# 1. 全局 PRL 風格配置
+# 1. PRL Style Configuration
 # ==========================================
 def set_prl_style():
     plt.rcParams.update({
@@ -29,113 +29,137 @@ def set_prl_style():
 set_prl_style()
 colors = ['#1f77b4', '#d62728', '#2ca02c', '#ff7f0e']
 
-# 系統核心參數
+# System Constants
 SIG_U = 0.12
-SIG_E = 0.05  # 理论推导中包含的三体涨落
-H_C = 0.3849  # 临界阈值 2/(3*sqrt(3))
+SIG_E = 0.05
+H_C = 0.3849
 
 
 # ==========================================
-# 2. 核心解析工具 (包含截断逻辑)
+# 2. Core Engines
 # ==========================================
 def get_x_roots_with_truncation(M):
-    """
-    求解 x^3 - x = M 的稳定根。
-    若 M > H_c，负分支消失，返回 (NaN, xp)
-    """
     roots = np.roots([1, 0, -1, -M])
     real_roots = np.sort(roots[np.isreal(roots)].real)
-
-    # 截断机制：只有当 M <= H_c 且存在三个实根时，负分支才存在
     if len(real_roots) == 3 and M <= H_C:
         return real_roots[0], real_roots[-1]
     else:
-        # 确定性跳变区：负分支消失，只剩正分支
         return np.nan, real_roots[-1]
 
 
 def solve_theory_unified(mu_d, sig_d, mu_e=0.0, sig_e=0.0, x0_guess=[-1.0, 1.0]):
     def equations(vars):
         m, q = vars
-        # 1. 有效场均值 (m^2 逻辑)
         M = mu_d * m + mu_e * (m ** 2)
-
-        # 2. 有效场总方差 (修正后的自洽方程：包含 sigma_e^2 * q^2)
-        Gamma2 = SIG_U ** 2 + (sig_d ** 2) * q + (sig_e ** 2) * (q ** 2)
-        Gamma = np.sqrt(Gamma2)
-
-        # 3. 根的获取与截断判断
+        Gamma = np.sqrt(SIG_U ** 2 + (sig_d ** 2) * q + (sig_e ** 2) * (q ** 2))
         xn, xp = get_x_roots_with_truncation(M)
-
         if np.isnan(xn):
-            # 确定性跳变：phi 强制为 1
             phi = 1.0
-            target_m = xp
-            target_q = xp ** 2
+            target_m, target_q = xp, xp ** 2
         else:
-            # 噪声诱导跳变：计算 erf 概率
             phi = 0.5 * (1 + erf((M - H_C) / (np.sqrt(2) * Gamma)))
             target_m = (1 - phi) * xn + phi * xp
             target_q = (1 - phi) * (xn ** 2) + phi * (xp ** 2)
-
         return [m - target_m, q - target_q]
 
-    # 解自洽方程组
     sol = fsolve(equations, x0=x0_guess, xtol=1e-9)
     m_f, q_f = sol
-
-    # 重新计算最终的 phi 以便绘图
     M_f = mu_d * m_f + mu_e * m_f ** 2
-    if M_f > H_C:
-        phi_f = 1.0
-    else:
-        G_f = np.sqrt(SIG_U ** 2 + sig_d ** 2 * q_f + sig_e ** 2 * q_f ** 2)
-        phi_f = 0.5 * (1 + erf((M_f - H_C) / (np.sqrt(2) * G_f)))
-
+    G_f = np.sqrt(SIG_U ** 2 + sig_d ** 2 * q_f + sig_e ** 2 * q_f ** 2)
+    phi_f = 1.0 if M_f > H_C else 0.5 * (1 + erf((M_f - H_C) / (np.sqrt(2) * G_f)))
     return m_f, q_f, phi_f
 
 
+def solve_system_ensemble(mu_d, sig_base, S=800, dt=0.05, steps=3000, n_trials=20):
+    m_list, phi_list = [], []
+    gamma_total = np.sqrt(SIG_U ** 2 + sig_base ** 2)
+    for _ in range(n_trials):
+        xi_i = np.random.normal(0, gamma_total, S)
+        x = np.full(S, -1.0) + np.random.normal(0, 0.01, S)
+        for t in range(steps):
+            m = np.mean(x)
+            x += (x - x ** 3 + mu_d * m + xi_i) * dt
+            x = np.clip(x, -2.5, 2.5)
+        m_list.append(np.mean(x))
+        phi_list.append(np.sum(x > 0) / S)
+    return np.mean(m_list), np.std(m_list), np.mean(phi_list), np.std(phi_list)
+
+
 # ==========================================
-# 3. 绘图任务 (1x2 布局)
+# 3. Main Plotting (2x3 Layout)
 # ==========================================
-fig, axs = plt.subplots(1, 2, figsize=(8.5, 3.5), dpi=150)
-plt.subplots_adjust(wspace=0.3)
+fig = plt.figure(figsize=(12, 7.5))
+gs = fig.add_gridspec(2, 3, hspace=0.35, wspace=0.3)
 
-mu_range = np.linspace(-1.2, 0.6, 100)
-sig_range = np.linspace(0.05, 1.5, 100)
-sig_samples = [0.1, 0.25, 0.35]
-mu_samples = [-0.6, -0.2, 0.4]
+# --- A. Mean State m (Simulation + Theory) ---
+ax_a = fig.add_subplot(gs[0, 0])
+mu_d_range_sim = np.linspace(-0.6, 0.7, 10)
+mu_d_range_th = np.linspace(-0.6, 0.7, 100)
+for i, sig in enumerate([0.1, 0.25]):
+    m_th = [solve_theory_unified(md, sig)[0] for md in mu_d_range_th]
+    ax_a.plot(mu_d_range_th, m_th, '-', color=colors[i], alpha=0.6, label=rf'Theo. $\sigma={sig}$')
 
-# --- 左图：扫描 mu_d (均值效应) ---
-for i, s in enumerate(sig_samples):
+    # Simulation with error bars
+    m_m, m_s, _, _ = zip(*[solve_system_ensemble(md, sig) for md in mu_d_range_sim])
+    ax_a.errorbar(mu_d_range_sim, m_m, yerr=m_s, fmt='o', mfc='none', color=colors[i], capsize=3)
+
+ax_a.set_title("A. Mean State $m$")
+ax_a.set_xlabel(r"$\mu_d$");
+ax_a.set_ylabel(r"$m$")
+ax_a.legend(frameon=False, fontsize=8)
+
+# --- B. Tipping Rate phi (Simulation + Theory) ---
+ax_b = fig.add_subplot(gs[0, 1])
+for i, sig in enumerate([0.15, 0.3]):
+    # Simulation with error bars
+    _, _, p_m, p_s = zip(*[solve_system_ensemble(md, sig) for md in mu_d_range_sim])
+    ax_b.errorbar(mu_d_range_sim, p_m, yerr=p_s, fmt='o', mfc='none', color=colors[i + 1], capsize=3)
+
+    p_th = [solve_theory_unified(md, sig)[2] for md in mu_d_range_th]
+    ax_b.plot(mu_d_range_th, p_th, '-', color=colors[i + 1], label=rf'Theo. $\sigma={sig}$')
+
+ax_b.set_title("B. Tipping Rate $\phi$")
+ax_b.set_xlabel(r"$\mu_d$");
+ax_b.set_ylabel(r"$\phi$")
+
+# --- C, D, E panels (Theoretical scans & PDF) ---
+ax_c = fig.add_subplot(gs[0, 2])
+for i, md in enumerate([-0.6, -0.2, 0.2]):
+    gamma = np.sqrt(SIG_U ** 2 + 0.15 ** 2)
+    x = np.full(2500, -1.0)
+    xi = np.random.normal(0, gamma, 2500)
+    for _ in range(2500):
+        x += (x - x ** 3 + md * np.mean(x) + xi) * 0.05
+    ax_c.hist(x, bins=35, density=True, alpha=0.4, color=colors[i], label=rf'$\mu_d={md}$')
+ax_c.set_title("C. PDF Evolution")
+ax_c.legend(frameon=False, fontsize=8)
+
+ax_d = fig.add_subplot(gs[1, 0])
+mu_scan = np.linspace(-1.2, 0.6, 100)
+for i, s in enumerate([0.1, 0.25, 0.35]):
     p_l = []
-    curr_guess = [-1.0, 1.0]  # 初始于负分支
-    for mu in mu_range:
-        m, q, p = solve_theory_unified(mu, s, sig_e=SIG_E, x0_guess=curr_guess)
-        p_l.append(p)
-        curr_guess = [m, q]
-    axs[0].plot(mu_range, p_l, color=colors[i], label=rf"$\sigma_d={s}$")
+    guess = [-1.0, 1.0]
+    for mu in mu_scan:
+        m, q, p = solve_theory_unified(mu, s, sig_e=SIG_E, x0_guess=guess)
+        p_l.append(p);
+        guess = [m, q]
+    ax_d.plot(mu_scan, p_l, color=colors[i], label=rf"$\sigma_d={s}$")
+ax_d.set_title(r"D. Coupling Effect")
+ax_d.set_xlabel(r"$\mu_d$");
+ax_d.set_ylabel(r"$\phi$")
 
-# --- 右图：扫描 sigma_d (异构性效应) ---
-for i, m_val in enumerate(mu_samples):
+ax_e = fig.add_subplot(gs[1, 1:])
+sig_scan = np.linspace(0.05, 1.5, 100)
+for i, m_val in enumerate([-0.6, -0.2, 0.4]):
     p_l = []
-    curr_guess = [-1.0, 1.0]
-    for sig in sig_range:
-        m, q, p = solve_theory_unified(m_val, sig, sig_e=SIG_E, x0_guess=curr_guess)
-        p_l.append(p)
-        curr_guess = [m, q]
-    axs[1].plot(sig_range, p_l, color=colors[i], label=rf"$\mu_d={m_val}$")
+    guess = [-1.0, 1.0]
+    for sig in sig_scan:
+        res_m, res_q, p = solve_theory_unified(m_val, sig, sig_e=SIG_E, x0_guess=guess)
+        p_l.append(p);
+        guess = [res_m, res_q]
+    ax_e.plot(sig_scan, p_l, color=colors[i], label=rf"$\mu_d={m_val}$")
+ax_e.set_title(r"E. Heterogeneity Effect")
+ax_e.set_xlabel(r"$\sigma_d$")
+ax_e.legend(frameon=False, ncol=3, fontsize=8)
 
-# 图形美化
-sub_labels = ['(a)', '(b)']
-for i, ax in enumerate(axs):
-    ax.grid(True, ls=':', alpha=0.6)
-    ax.legend(frameon=False, loc='best', fontsize=8)
-    ax.text(-0.18, 1.05, sub_labels[i], transform=ax.transAxes, fontweight='bold', fontsize=12)
-    ax.set_ylabel(r'Tipping Rate $\phi$')
-
-axs[0].set_xlabel(r'Coupling $\mu_d$')
-axs[1].set_xlabel(r'Heterogeneity $\sigma_d$')
-
-plt.tight_layout()
 plt.show()
