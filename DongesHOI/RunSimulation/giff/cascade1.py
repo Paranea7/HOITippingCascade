@@ -12,8 +12,8 @@ H_C = 0.3849  # 势垒消失临界阈值
 
 # --- 相互作用参数 ---
 MU_D, SIG_D = 0.1, 0.0  # 线性耦合 (mu_d, sigma_d)
-MU_E, SIG_E = 8, 0.0  # 二阶耦合 (mu_e, sigma_e)
-MU_U, SIG_U = 0.0, 1.0 # 外部输入 (mu_u, sigma_u)
+MU_E, SIG_E = 0.8, 0.0  # 二阶耦合 (mu_e, sigma_e)
+MU_U, SIG_U = 0.0, 0.128 # 外部输入 (mu_u, sigma_u)
 
 # ==========================================
 # 2. 参数生成与种子初始化 (Seeded Initialization)
